@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repository-checks:
+    name: Repository checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
+        with:
+          # Reads the exact required-version from pyproject.toml.
+          enable-cache: false
+
+      - name: Install Python
+        run: uv python install
+
+      - name: Install locked development dependencies
+        run: uv sync --locked --dev
+
+      - name: Check YAML
+        run: uv run --locked yamllint --strict .github .yamllint.yaml
+
+      - name: Check workflow security
+        run: uv run --locked zizmor --offline --no-progress .github/workflows

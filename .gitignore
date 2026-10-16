@@ -1,0 +1,25 @@
+AGENTS.md
+PLAN.md
+
+# Local environments and caches
+.venv/
+.uv-cache/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+dist/
+target/
+
+# Private runtime data and downloaded models
+.env
+.env.*
+!.env.example
+models/
+recordings/
+conversations/
+runtime/
+*.gguf
+*.onnx
