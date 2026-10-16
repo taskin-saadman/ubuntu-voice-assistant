@@ -456,3 +456,28 @@ physical microphone-indicator observations, retry and Wi-Fi-disabled UI operatio
 still need explicit acceptance. Qwen replies and Piper playback remain unwired in
 this preview. These documentation-only updates were checked with `git diff --check`;
 no application logic changed and automated suites were not repeated.
+
+### User acceptance of native silence, cancellation and recovery
+
+On 2026-10-17, the user confirmed that all three requested follow-up checks passed:
+
+- Silence produced a no-speech notice.
+- Escape or switching windows stopped recording and cleared Ubuntu's microphone
+  indicator.
+- Re-enabling the microphone allowed another successful turn.
+
+Together with the preceding native UI screenshot and displayed transcripts, this
+records user acceptance of the core Phase 3 push-to-talk transcription flow and
+its tested cancellation/recovery behavior. This supersedes the pending status of
+these specific checks above. It is user-reported verification, not independently
+captured timing or device telemetry.
+
+The confirmation is scoped to the three checks requested immediately beforehand.
+Physical-device disconnection, the full keyboard/pointer edge-case matrix, native
+reconnect/second-window rejection, repeated-turn measurements and Wi-Fi-disabled
+UI operation remain separate acceptance items. Phase 4 connects Qwen conversation;
+Phase 5 adds Piper and playback. The complete microphone-to-speaker milestone is
+not yet implemented.
+
+No application code changed in this acceptance update. `git diff --check` passed;
+automated tests were not repeated for documentation-only changes.
