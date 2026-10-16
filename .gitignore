@@ -12,6 +12,7 @@ __pycache__/
 node_modules/
 dist/
 target/
+/desktop/src-tauri/gen/schemas/
 
 # Private runtime data and downloaded models
 .env
