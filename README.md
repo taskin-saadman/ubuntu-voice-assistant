@@ -5,8 +5,9 @@ llama.cpp, faster-whisper, Piper, FastAPI and React/Tauri 2.
 
 The repository contains a tested controller foundation and a local health API.
 The recorded-audio Whisper → Qwen → Piper pipeline has also been tested separately
-on the target laptop, including a restart with Wi-Fi disabled. Real engine adapters
-and the push-to-talk interface are not yet connected to the new controller. See the
+on the target laptop, including a restart with Wi-Fi disabled. Capture, VAD and
+Whisper now connect through a local transcription diagnostic; Qwen, Piper and the
+push-to-talk interface are not yet connected to the new controller. See the
 [verification results and limitations](docs/verification.md).
 
 ## Development with uv
@@ -59,10 +60,20 @@ they require no GPU, model downloads or microphone access.
 
 ## Phase 3 audio development
 
-The first Phase 3 increment adds isolated microphone capture, input-device
-selection, recording limits and 16 kHz normalization. It is not yet wired to the
-health server or a push-to-talk UI. See [Ubuntu audio setup](docs/setup-ubuntu.md)
-for the PortAudio prerequisite, device listing and an explicit manual capture check.
+Phase 3 adds isolated microphone capture, input-device selection, recording limits,
+16 kHz normalization, Silero silence filtering and local CPU/int8 Whisper. Run an
+explicit five-second microphone-to-transcript check with your current input index:
+
+```bash
+uv run --offline --locked python -m voice_assistant.transcribe --device 23 --seconds 5
+```
+
+The model loads before capture opens. Speak when `State: listening` appears.
+Ctrl+C cancels and releases resources. This diagnostic displays the transcript in
+your terminal and writes no recordings or history files. See
+[Ubuntu audio setup](docs/setup-ubuntu.md) for device enumeration, local model
+requirements, silence/recovery checks and limitations. The health server remains
+read-only; authenticated controls and the React/Tauri interface are still pending.
 
 ## GitHub Actions
 

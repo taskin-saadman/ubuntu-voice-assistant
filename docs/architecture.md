@@ -18,8 +18,8 @@ uv project. Importing it never loads models, downloads assets or opens devices.
 
 Fake adapters live in `backend/tests/fakes.py`. They provide synthetic PCM and
 controlled delays/failures; they are not a default application mode or substitutes
-for the selected engines. Real adapters will arrive in the subsequent planned
-phases, using the already validated llama.cpp/Whisper/Piper configuration.
+for the selected engines. The Phase 3 adapters described below extend this
+foundation using the selected engine configuration.
 
 ## Turn lifecycle
 
@@ -176,3 +176,40 @@ audio operations. This process-per-turn design prioritizes reliable device relea
 Its real startup cost and microphone behavior are still to be measured. No runtime
 controls have been exposed yet: authentication/origin checks and UI disconnect
 cancellation remain prerequisites for connecting the future desktop interface.
+
+## Phase 3 VAD and transcription increment
+
+`speech/adapters.py` provides separate `SileroVAD` and `WhisperTranscriber`
+boundaries sharing a `SpeechWorker`. The worker starts lazily, loads the local
+small.en model on CPU/int8, and retains it between successful requests. It accepts
+one request at a time and rejects overlap. PCM is limited to mono 16 kHz and 30
+seconds; responses are validated and transcripts bounded to 8192 characters.
+Heavy imports, bundled Silero inference and Whisper's lazy segment iteration all
+run in the child process, outside the API event loop.
+
+Whisper's standalone adapter repeats the speech check and enables the decoder's
+integrated VAD filter. This intentionally guards callers that bypass the controller;
+empty/silent input returns an empty transcript without invoking the decoder.
+There is no transcript prompt carried between calls. The controller retains only
+its bounded in-memory conversation. Neither the adapters nor the worker log content.
+
+Cancelling or timing out a request terminates/reaps the child, using forced kill
+if normal termination takes longer than 250 ms. The next request reloads the local
+model. `close()` permanently shuts down the worker. The controller now allows an
+additional bounded cleanup interval for cancelled inference tasks to settle before
+declaring a turn finished; lingering work still quarantines subsequent turns.
+An application runtime must close both the controller and its owned speech worker.
+
+`TranscriptionComponents` explicitly configures a capture/VAD/STT-only controller.
+Its successful state path is `idle → listening → transcribing → idle`, publishing
+one user message. Silence ends with `no_speech` and no conversation message. The
+existing full `Components` configuration retains Qwen/TTS/playback orchestration.
+There are no fake assistant responses or dummy speech outputs in transcription mode.
+
+`python -m voice_assistant.transcribe` wires these adapters into a timed terminal
+diagnostic. Model warmup happens before microphone permission is enabled; errors
+and state changes are displayed. Its transcript output is an explicit user-facing
+view, not application logging. This command adds no HTTP routes or network listeners.
+The FastAPI factory remains health-only, with default readiness still 503 until an
+application runtime wires its probes. Authentication, origin validation, disconnect
+cancellation and the React/Tauri hold control remain subsequent work.

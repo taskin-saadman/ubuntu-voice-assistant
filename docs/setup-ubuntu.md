@@ -2,10 +2,10 @@
 
 ## Current implementation
 
-Phase 3 has started with a microphone adapter and synthetic tests. The health
-server still exposes only `/health` and `/ready`; it does not open the microphone.
-Whisper/VAD integration, authenticated controls and the React/Tauri push-to-talk
-window remain subsequent increments. This is not yet a runnable voice assistant.
+Phase 3 provides capture and local VAD/Whisper through a transcription diagnostic.
+The health server still exposes only `/health` and `/ready`; it does not open the
+microphone. Authenticated controls and the React/Tauri push-to-talk window remain
+subsequent increments. This is not yet the complete voice assistant.
 
 ## PortAudio prerequisite
 
@@ -73,8 +73,7 @@ lost-release checks will also need validation in the eventual push-to-talk UI.
 
 The worker rejects overflow and incomplete reads instead of transcribing damaged
 audio. Empty, immediately released capture becomes one zero-valued PCM frame;
-the future VAD adapter must classify it as no speech. No real silence detection is
-claimed yet.
+the Silero adapter classifies generated one-frame silence as no speech in tests.
 
 ## Automated checks
 
@@ -89,3 +88,50 @@ uv run --offline --locked pytest -W error
 Synthetic streams and subprocesses exercise capture boundaries without PortAudio,
 an audio device, models, user recordings or network access. Real microphone quality,
 device release and capture startup latency must be observed separately on the laptop.
+
+## Microphone-to-transcript check
+
+The diagnostic uses the same controller, capture adapter, Silero VAD and Whisper
+adapter intended for the desktop. It ends after transcription and does not invoke
+Qwen, Piper or any tools. Local settings default to:
+
+- Model directory: `~/.local/share/ubuntu-voice-assistant/models/whisper-small.en`.
+- Whisper: CPU, int8, eight threads, one worker, English, beam size 5.
+- VAD: bundled Silero, probability threshold 0.5, minimum speech 100 ms,
+  minimum separating silence 500 ms. Very short utterances can be discarded.
+- Maximum recorded audio: 30 seconds; the diagnostic accepts 0.1–25 seconds to
+  leave room before the controller's independent recording deadline.
+
+The local model directory must contain `model.bin`, `config.json`, `tokenizer.json`
+and either `vocabulary.txt` or `vocabulary.json`. Missing files cause an error;
+the diagnostic never downloads a replacement. Use `--model-path /absolute/path`
+to point at your existing small.en model directory if it is elsewhere.
+
+First enumerate devices; indices can change. Then choose your microphone input
+(index 23 was the built-in analog input in the supplied verification output):
+
+```bash
+uv run --offline --locked python -m voice_assistant.audio
+uv run --offline --locked python -m voice_assistant.transcribe --device 23 --seconds 5
+```
+
+The command loads the local model while the microphone is off. Wait for
+`State: listening` and the “Speak now” message before speaking a short sentence.
+Expected states are `listening → transcribing → idle`, with a transcript and
+`Result: completed`. The transcript is displayed intentionally in the terminal;
+audio and history are kept in memory, with no recording/history files written.
+The worker enforces offline/telemetry-disable settings internally; `--offline`
+also prevents uv from fetching dependencies.
+
+Repeat the command while staying quiet: expect `Result: no_speech` and no transcript.
+Then press Ctrl+C during recording, confirm the microphone indicator clears, and
+run a normal turn again. The diagnostic prints `Cancelled.` without a traceback.
+Repeat cancellation during `transcribing` if the inference interval is long enough.
+Record whether cancellation and subsequent turns succeed, and whether the visible
+transcript matches what you said. Avoid sharing private utterances in logs or Git.
+
+The final “Microphone disabled” line describes the controller's permission flag.
+Any cleanup error is also displayed; confirm the desktop microphone indicator
+clears instead of relying on that line alone. Speech quality, noisy-room behavior
+and physical-device failures still require these real-device checks. This command
+uses a timed recording; the hold-to-talk desktop control is a later increment.

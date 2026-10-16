@@ -280,3 +280,52 @@ device inventory containing personal identifiers were added to the repository.
 Speech quality, live VAD/transcription, startup latency, physical device disconnects
 and real-device lost-release behavior remain unverified. `UV_OFFLINE=true` was set,
 but this capture check was not a network-traffic audit or a complete voice turn.
+
+## Phase 3, second increment: local VAD and transcription
+
+Verified locally on 2026-10-17 with the locked Python 3.12 environment:
+
+| Check | Result |
+| --- | --- |
+| Ruff lint/format and strict mypy | Passed, 31 Python files |
+| Full suite, warnings as errors, offline flags and asyncio debug enabled | 109 tests passed |
+| Speech adapter tests | 17 passed |
+| Transcription controller/diagnostic tests | 6 passed |
+| Diagnostic `--help` | Passed; no model/device initialization |
+| Diagnostic with a nonexistent model directory | Safe initialization error and exit 1; capture never enabled |
+
+Tests cover incomplete model directories (including missing tokenizer files),
+bounded settings/IPC, float32 PCM conversion, real bundled-Silero rejection of
+generated silence, lazy segment consumption, transcript limits, resident worker
+reuse, overlapping requests, malformed replies, forced termination, deadlines and
+reload after cancellation. Transcription-only controller tests verify state and
+message behavior, silence skipping STT, no LLM/TTS calls, inference cancellation
+cleanup and diagnostic shutdown. CI needs no microphone or downloaded Whisper
+weights; the Silero model is bundled in the existing faster-whisper dependency.
+
+### Native worker smoke check with synthetic speech
+
+A short nonpersonal sentence was synthesized with the existing local Piper voice
+into memory, normalized to 16 kHz PCM, and passed to the new speech adapters. This
+check used the downloaded small.en model with CPU/int8, eight threads and one
+worker. It did not open the microphone, read personal recordings or write audio files.
+
+| Observation | Result |
+| --- | --- |
+| Worker startup, Whisper loading and VAD warmup | 0.76 s |
+| One second of generated zero-valued PCM | VAD false; standalone transcript empty |
+| Piper-generated sentence | VAD true |
+| First transcription through the resident worker | Correct sentence, 0.98 s |
+| Second transcription through the same worker | Correct sentence, 0.93 s |
+| Worker shutdown | Completed successfully |
+
+Transcription timings include IPC and filtering but exclude Piper synthesis and
+microphone capture. These are two observations of one synthetic utterance, not a
+representative latency distribution or live recognition accuracy measurement.
+Offline/telemetry-disable flags were set; no packet capture was performed.
+
+Live microphone → VAD → Whisper accuracy, quiet-room/noisy-room filtering, visible
+microphone privacy behavior and cancellation/recovery through the diagnostic still
+need the user-run checks in [setup-ubuntu.md](setup-ubuntu.md). The desktop hold
+control and authenticated transport are not implemented yet, so Phase 3's complete
+exit criterion remains pending.
