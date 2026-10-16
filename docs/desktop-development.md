@@ -82,6 +82,23 @@ is implemented. The native window enables no Tauri command capabilities. Its CSP
 restricts connections to local services; development alone allows inline scripts
 for Vite's React refresh preamble.
 
+### VS Code Snap: missing `antialiasing` schema key
+
+If startup aborts with `org.gnome.settings-daemon.plugins.xsettings` missing the
+`antialiasing` key, check whether the terminal inherited `GSETTINGS_SCHEMA_DIR`
+from the VS Code Snap. This was reproduced locally with Snap revision 268.
+From `desktop/`, select the system schemas for this launch:
+
+```bash
+GSETTINGS_SCHEMA_DIR=/usr/share/glib-2.0/schemas npm run tauri -- dev
+```
+
+This environment override applies only to the command and its child processes.
+It does not modify GNOME settings or schema files. A native GTK initialization
+probe failed with the inherited environment and passed with this single override;
+the complete Tauri window and microphone interaction still need verification.
+See the [matching upstream VS Code report](https://github.com/microsoft/vscode/issues/340859).
+
 ## Local checks and acceptance
 
 ```bash

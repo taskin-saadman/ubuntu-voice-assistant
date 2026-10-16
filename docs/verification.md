@@ -406,3 +406,26 @@ The executable was not launched and no microphone was opened in this verificatio
 Window appearance, native focus/cancellation behavior, microphone capture and a
 Wi-Fi-disabled UI turn still require the manual acceptance procedure in
 [desktop-development.md](desktop-development.md). No release was packaged or pushed.
+
+### GTK startup failure from the VS Code Snap environment
+
+The user's subsequent `npm run tauri -- dev` compiled and launched the executable,
+then aborted in GLib/GIO because the xsettings schema lacked `antialiasing`.
+Inspection found that the executable resolved the system GTK/GDK libraries while
+the terminal inherited `GSETTINGS_SCHEMA_DIR` pointing into VS Code Snap revision
+268. Other GTK/data search variables also referenced the Snap.
+
+A separate Python ctypes probe called the system `gtk_init_check` without creating
+an application window or opening audio devices. Core dumps were disabled for the
+probe. Results observed on 2026-10-17:
+
+- Inherited environment: reproduced the exact schema-key error; process exit -6.
+- Only `GSETTINGS_SCHEMA_DIR=/usr/share/glib-2.0/schemas`: GTK initialization returned
+  true and process exit 0.
+- System schema plus system XDG data directories: also passed; the extra override
+  was unnecessary for this failure and is not part of the recommended command.
+
+The documented workaround sets the single variable for the Tauri launch. No OS
+configuration or application code changed. GTK initialization passing does not
+establish that WebKit rendering or the complete native microphone flow works;
+those remain the next user acceptance checks.
