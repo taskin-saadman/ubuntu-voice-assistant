@@ -218,3 +218,39 @@ the new controller. No model, microphone or speaker was needed by these tests.
 The GitHub Actions workflow now includes these backend checks; a hosted run has
 not been observed for this branch. The next implementation phase is push-to-talk
 capture and transcription with authenticated UI transport.
+
+## Phase 3, first increment: microphone adapter
+
+Verified locally on 2026-10-17 with Python 3.12.14 and the locked uv environment:
+
+| Check | Result |
+| --- | --- |
+| Locked development dependency synchronization | Passed |
+| Ruff lint and formatting | Passed, 22 Python files |
+| Strict mypy | Passed, 22 Python files |
+| Full suite with warnings treated as errors and asyncio debug enabled | 86 tests passed |
+| Focused audio suite | 35 tests passed |
+| YAML lint and offline workflow security checks | Passed |
+| Whitespace/diff validation | Passed |
+| Actual input-enumeration worker with missing PortAudio | Returned the expected safe prerequisite error |
+
+The capture tests use generated tones, zero-valued PCM and controlled subprocesses.
+They verify 8/16/44.1/48 kHz normalization, finite recording limits, overflow and
+short-read failures, device closure, single ownership, stale startup cancellation,
+malformed/oversized IPC, worker termination and forced kill, lost-release cleanup,
+and cancellation of a cleanup waiter. Controller integration tests cover
+microphone-off, cancellation during startup/finish, silence through a fake VAD,
+recording timeout and reuse after successful cleanup.
+
+These tests exposed and fixed a Phase 2 controller issue: cooperative device
+cancellation was being treated as a permanent cleanup failure before its cleanup
+window had elapsed. Regression tests verify successful cleanup allows reuse and
+a resource operation outliving cleanup still requires restart.
+
+The real enumeration check did not record audio. `apt-cache policy` reported
+`libportaudio2` was not installed, and no OS packages were changed. Real microphone
+capture, device-release behavior and startup latency remain unverified until the
+prerequisite and the [manual capture checks](setup-ubuntu.md) are completed.
+There is no new claim of end-to-end offline voice operation. VAD/Whisper wiring,
+authenticated transport and the React/Tauri window remain for later Phase 3
+increments; the Phase 3 exit criterion is not yet satisfied.

@@ -57,6 +57,13 @@ controller's typed interfaces, event schemas, cancellation and error recovery.
 Tests exercise complete simulated turns with fake adapters and synthetic audio;
 they require no GPU, model downloads or microphone access.
 
+## Phase 3 audio development
+
+The first Phase 3 increment adds isolated microphone capture, input-device
+selection, recording limits and 16 kHz normalization. It is not yet wired to the
+health server or a push-to-talk UI. See [Ubuntu audio setup](docs/setup-ubuntu.md)
+for the PortAudio prerequisite, device listing and an explicit manual capture check.
+
 ## GitHub Actions
 
 The `CI` workflow runs on pull requests, pushes to `main`, and manual dispatch.

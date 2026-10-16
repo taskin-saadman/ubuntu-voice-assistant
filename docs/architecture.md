@@ -146,3 +146,33 @@ environment. They do not establish real-device cancellation, live voice latency,
 streamed llama.cpp response parsing, tool permissions, UI behavior or desktop
 packaging. Phase 1 engine measurements remain separate evidence in
 [verification.md](verification.md).
+
+## Phase 3 capture increment
+
+`audio/capture.py` implements the capture protocol with a short-lived subprocess
+per recording. The child imports sounddevice after a typed request; importing the
+backend or listing devices never starts recording. `audio/worker.py` owns the
+PortAudio stream, reads mono signed 16-bit samples at the selected device's default
+rate, closes it, and uses existing PyAV resampling to return 16 kHz PCM. No WAV files
+are created. Native diagnostics are discarded; the parent receives allowlisted
+error codes through private pipes.
+
+Recording is bounded by both a frame count and wall-clock duration, with a maximum
+of 30 seconds. A separate parent watchdog terminates a worker blocked in a native
+read when the release signal is lost. Start/finish waits are bounded to four
+seconds. Abort sends termination, waits up to 250 ms, then uses a forced kill and
+waits up to 500 ms to reap the child. The adapter cannot be reused until cleanup
+finishes; cancellation of a caller does not abandon that cleanup. Normal backend
+shutdown must still await controller cleanup. Abrupt parent-process termination
+during a hung native call has not been verified by this increment.
+
+The controller now gives cancelled device operations the bounded cleanup window
+to finish. Operations still active after abort/stop require a backend restart;
+operations successfully reaped during cleanup permit another turn. Tests cover
+both outcomes, including a synthetic process that ignores normal termination.
+
+Python adapters run on the same event loop; only the private child handles blocking
+audio operations. This process-per-turn design prioritizes reliable device release.
+Its real startup cost and microphone behavior are still to be measured. No runtime
+controls have been exposed yet: authentication/origin checks and UI disconnect
+cancellation remain prerequisites for connecting the future desktop interface.
