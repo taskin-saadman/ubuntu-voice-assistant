@@ -67,6 +67,12 @@ class SpeechWorker:
     async def warmup(self) -> None:
         await self.request("warmup")
 
+    @property
+    def ready(self) -> bool:
+        if not self._ready or self._closed or self._spawn is None or not self._spawn.done():
+            return False
+        return not self._spawn.cancelled() and self._spawn.result().returncode is None
+
     async def request(
         self, action: Literal["warmup", "vad", "transcribe"], audio: AudioBuffer | None = None
     ) -> SpeechReply:
