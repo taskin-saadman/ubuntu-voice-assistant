@@ -178,9 +178,9 @@ proof that no component attempted an external request.
 ## Remaining milestone verification
 
 - Live push-to-talk capture, microphone-off behavior and device failures.
-- Explicit state transitions, cancellation, deadlines and recovery from unavailable engines.
+- Real-adapter state transitions, cancellation, deadlines and recovery from unavailable engines.
 - Tool schema validation, allowlist rejection and confirmation policy tests.
-- Backend health/readiness, authenticated transport and origin restrictions.
+- Integrated engine readiness, authenticated transport and origin restrictions.
 - Frontend/Tauri integration and visible errors.
 - Twenty consecutive turns, longer/context-heavy prompts, silence and noisy input.
 - Representative latency distribution and peak RAM/VRAM monitoring.
@@ -188,5 +188,33 @@ proof that no component attempted an external request.
 - Exact GPU offload configuration and reproducible startup documentation.
 - Piper engine/voice distribution licensing review before packaging or release.
 
-The next implementation phase is the controller, typed interfaces and explicit
-state machine. The engine checks do not mark the complete push-to-talk milestone done.
+The engine checks do not mark the complete push-to-talk milestone done.
+
+## Phase 2 controller and API verification
+
+Verified locally on 2026-10-17 with Python 3.12 and the locked uv environment:
+
+| Check | Result |
+| --- | --- |
+| `uv sync --locked --dev` | Passed |
+| Ruff lint and format checks | Passed |
+| Strict mypy checks | Passed, 14 source files |
+| `PYTHONASYNCIODEBUG=1 uv run --offline --locked pytest -W error` | 49 tests passed |
+| Strict YAML lint and offline zizmor workflow checks | Passed |
+| `git diff --check` | Passed |
+| Live loopback server `/health` | HTTP 200, status `ok` |
+| Live loopback server `/ready` | HTTP 503, expected with no configured adapters |
+| Live server termination | Exited successfully |
+
+Tests used synthetic audio and fake adapters with controlled failures and delays.
+They covered complete turns, silence, cancellation at each stage, deadlines,
+cleanup failures, stale controls, microphone-off rejection, event ordering,
+bounded memory, safe errors and responsive health requests during pending work.
+Hugging Face offline and telemetry-disable flags were also set for the test run.
+
+This satisfies the Phase 2 simulated-turn exit criterion. It does not verify
+native worker cancellation, live microphone capture or a real engine turn through
+the new controller. No model, microphone or speaker was needed by these tests.
+The GitHub Actions workflow now includes these backend checks; a hosted run has
+not been observed for this branch. The next implementation phase is push-to-talk
+capture and transcription with authenticated UI transport.
