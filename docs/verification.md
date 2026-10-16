@@ -429,3 +429,30 @@ The documented workaround sets the single variable for the Tauri launch. No OS
 configuration or application code changed. GTK initialization passing does not
 establish that WebKit rendering or the complete native microphone flow works;
 those remain the next user acceptance checks.
+
+### Native UI rendering and transcript display
+
+On 2026-10-17, after the schema-only workaround, the user supplied a screenshot
+showing WebKit's internal-error page. Inspection still found Snap GTK/GIO module
+paths in the inherited terminal environment. The next launch instructions cleared
+`GTK_PATH`, `GTK_EXE_PREFIX`, `GTK_IM_MODULE_FILE` and `GIO_MODULE_DIR`, selected
+system schemas, and restricted XDG data directories to the system locations.
+
+The user's subsequent screenshot visibly confirms:
+
+- The native Local Voice window renders the React interface instead of the error page.
+- The UI reports a local connection and exposes the loaded-model device controls.
+- Multiple user transcript entries are displayed in the conversation panel.
+- Microphone permission is shown as disabled and the hold button is disabled.
+
+This is screenshot evidence from the target laptop, not an independently observed
+recording session. No screenshot or transcript text was copied into the repository.
+The combined environment workaround succeeded at rendering; the exact offending
+GTK/GIO override was not isolated. The screenshot also shows vertical overflow,
+so compact-window layout remains a visual refinement item.
+
+Native pointer/keyboard state timing, silence behavior, Escape/focus-loss cleanup,
+physical microphone-indicator observations, retry and Wi-Fi-disabled UI operation
+still need explicit acceptance. Qwen replies and Piper playback remain unwired in
+this preview. These documentation-only updates were checked with `git diff --check`;
+no application logic changed and automated suites were not repeated.

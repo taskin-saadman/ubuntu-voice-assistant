@@ -52,8 +52,9 @@ can change between sessions; settings are not persisted.
 ## Native Tauri development window
 
 The target laptop's development libraries are installed and the locked native
-Cargo check and debug executable build pass. Window launch and microphone interaction still need manual
-acceptance. On a fresh Ubuntu setup, install the prerequisites separately:
+Cargo check and debug executable build pass. A user-supplied screenshot confirms
+the native interface renders and displays transcripts. Remaining manual acceptance
+checks are listed below. On a fresh Ubuntu setup, install the prerequisites separately:
 
 ```bash
 sudo apt update
@@ -82,22 +83,29 @@ is implemented. The native window enables no Tauri command capabilities. Its CSP
 restricts connections to local services; development alone allows inline scripts
 for Vite's React refresh preamble.
 
-### VS Code Snap: missing `antialiasing` schema key
+### VS Code Snap: GTK schema and WebKit startup errors
 
 If startup aborts with `org.gnome.settings-daemon.plugins.xsettings` missing the
 `antialiasing` key, check whether the terminal inherited `GSETTINGS_SCHEMA_DIR`
 from the VS Code Snap. This was reproduced locally with Snap revision 268.
-From `desktop/`, select the system schemas for this launch:
+Selecting the system schemas alone fixed GTK initialization, but the user then
+observed a WebKit internal-error page. Other GTK/GIO paths still referenced Snap
+modules. The user supplied a screenshot of the functioning interface after the
+following expanded launch command. From `desktop/`:
 
 ```bash
-GSETTINGS_SCHEMA_DIR=/usr/share/glib-2.0/schemas npm run tauri -- dev
+env -u GTK_PATH -u GTK_EXE_PREFIX \
+    -u GTK_IM_MODULE_FILE -u GIO_MODULE_DIR \
+    GSETTINGS_SCHEMA_DIR=/usr/share/glib-2.0/schemas \
+    XDG_DATA_DIRS=/usr/local/share:/usr/share \
+    npm run tauri -- dev
 ```
 
-This environment override applies only to the command and its child processes.
-It does not modify GNOME settings or schema files. A native GTK initialization
-probe failed with the inherited environment and passed with this single override;
-the complete Tauri window and microphone interaction still need verification.
-See the [matching upstream VS Code report](https://github.com/microsoft/vscode/issues/340859).
+These environment overrides apply only to the command and its child processes.
+They do not modify GNOME settings or schema files. The successful screenshot
+does not isolate which additional override resolved WebKit's failure.
+See the [GTK schema report](https://github.com/microsoft/vscode/issues/340859) and
+[Snap GTK/GIO WebKit report](https://github.com/canonical/authd/issues/1829).
 
 ## Local checks and acceptance
 
