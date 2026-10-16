@@ -38,9 +38,9 @@ is disabled for the small initial tool set.
 
 1. **Now:** locked uv tooling, strict YAML validation and workflow security checks
    on pull requests and main, with bounded runtime and read-only permissions.
-2. **Backend implementation:** add Ruff, mypy and pytest to the uv development
-   group, then require lint, type and unit/integration checks. Use fake engine
-   adapters so PR jobs do not require downloaded models or GPU access.
+2. **Phase 2 backend:** Ruff lint/format checks, strict mypy and pytest with async
+   tests run in the same workflow. Fake engine adapters keep PR jobs independent
+   of downloaded models, GPU access and real recordings. Warnings fail tests.
 3. **Desktop implementation:** add `npm ci`, TypeScript checks, UI tests and a
    production frontend build. Add Cargo formatting, linting and checks with the
    required Ubuntu Tauri libraries. Keep lockfiles under version control.

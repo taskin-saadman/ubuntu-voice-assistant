@@ -25,6 +25,10 @@ server performs no downloads or engine initialization. Inference dependencies
 remain those verified in [verification.md](verification.md); distribution of Piper
 and voices still requires the review recorded there.
 
+FastAPI's resolved dependencies include the OpenTelemetry API interface. No
+OpenTelemetry SDK, exporter, instrumentation or remote telemetry is configured
+by this application; the `standard`/`opentelemetry` extras are not installed.
+
 Sources: [Pydantic](https://pypi.org/project/pydantic/),
 [FastAPI](https://pypi.org/project/fastapi/), [Uvicorn](https://pypi.org/project/uvicorn/),
 [HTTPX](https://pypi.org/project/httpx/), [pytest](https://pypi.org/project/pytest/),
