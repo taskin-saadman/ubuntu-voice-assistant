@@ -8,7 +8,7 @@ The recorded-audio Whisper → Qwen → Piper pipeline has also been tested sepa
 on the target laptop, including a restart with Wi-Fi disabled. Capture, VAD and
 Whisper now connect through a local transcription diagnostic and an authenticated
 React push-to-talk preview. Qwen and Piper are not yet connected to the new controller.
-The Tauri shell still needs native build and hardware acceptance checks. See the
+The Tauri shell builds locally; window launch and hardware acceptance remain pending. See the
 [verification results and limitations](docs/verification.md).
 
 ## Development with uv

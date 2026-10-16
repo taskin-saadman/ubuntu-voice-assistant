@@ -380,3 +380,29 @@ visible microphone-indicator cleanup, native focus behavior, reduced-motion visu
 review and a Wi-Fi-disabled run remain the checks in
 [desktop-development.md](desktop-development.md). The existing terminal microphone
 acceptance does not prove these new UI behaviors on the laptop.
+
+
+### Native build after system prerequisite installation
+
+On 2026-10-17, the user reported installing the requested system development
+libraries. Subsequent local checks confirmed WebKitGTK 2.52.6, GTK 3.24.52 and
+D-Bus 1.16.2 through pkg-config, resolving the earlier native-build blocker.
+
+| Check | Result |
+| --- | --- |
+| `npm run build` | Strict TypeScript and Vite build passed |
+| `cargo +1.98.1 check --locked --manifest-path desktop/src-tauri/Cargo.toml` | Passed |
+| `cargo +1.98.1 build --offline --locked -j 2 --manifest-path desktop/src-tauri/Cargo.toml` | Debug executable compiled and linked successfully |
+| `cargo +1.98.1 fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check` | Passed |
+| Shared-library resolution for the debug executable | No missing libraries reported by `ldd` |
+
+The exact Rust 1.98.1 toolchain was provisioned by rustup before the checks;
+that setup used network access. The subsequent Cargo build used cached crates
+with `--offline`, which does not establish offline operation of the running app.
+Generated Tauri schema output is now ignored by Git. No application logic changed,
+so backend and DOM suites were not repeated after the prior passing runs.
+
+The executable was not launched and no microphone was opened in this verification.
+Window appearance, native focus/cancellation behavior, microphone capture and a
+Wi-Fi-disabled UI turn still require the manual acceptance procedure in
+[desktop-development.md](desktop-development.md). No release was packaged or pushed.

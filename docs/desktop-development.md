@@ -51,10 +51,9 @@ can change between sessions; settings are not persisted.
 
 ## Native Tauri development window
 
-The shell is configured, but native compilation and launch are not verified yet.
-The target laptop is missing development libraries. The attempted Cargo check
-stopped at `dbus-1`; pkg-config also reported missing GTK/WebKit headers.
-Installing these changes OS packages and must be approved/run separately:
+The target laptop's development libraries are installed and the locked native
+Cargo check and debug executable build pass. Window launch and microphone interaction still need manual
+acceptance. On a fresh Ubuntu setup, install the prerequisites separately:
 
 ```bash
 sudo apt update
@@ -66,7 +65,7 @@ sudo apt install libwebkit2gtk-4.1-dev libxdo-dev \
 laptop; other systems also need them. This follows the
 [official Linux prerequisites](https://v2.tauri.app/start/prerequisites/), with
 D-Bus headers explicitly included based on the observed build error. Rust 1.98.1
-is already installed locally. After prerequisites are installed:
+is available locally. After prerequisites are installed:
 
 ```bash
 cd desktop
