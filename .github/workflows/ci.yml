@@ -41,3 +41,19 @@ jobs:
 
       - name: Check workflow security
         run: uv run --locked zizmor --offline --no-progress .github/workflows
+
+      - name: Lint backend
+        run: uv run --offline --locked ruff check backend
+
+      - name: Check backend formatting
+        run: uv run --offline --locked ruff format --check backend
+
+      - name: Type check backend
+        run: uv run --offline --locked mypy
+
+      - name: Test backend with fake adapters
+        env:
+          HF_HUB_OFFLINE: "1"
+          HF_HUB_DISABLE_TELEMETRY: "1"
+          PYTHONASYNCIODEBUG: "1"
+        run: uv run --offline --locked pytest -W error
