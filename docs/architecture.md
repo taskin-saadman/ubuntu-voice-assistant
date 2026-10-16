@@ -18,8 +18,8 @@ uv project. Importing it never loads models, downloads assets or opens devices.
 
 Fake adapters live in `backend/tests/fakes.py`. They provide synthetic PCM and
 controlled delays/failures; they are not a default application mode or substitutes
-for the selected engines. Real adapters will arrive in the subsequent planned
-phases, using the already validated llama.cpp/Whisper/Piper configuration.
+for the selected engines. The Phase 3 adapters described below extend this
+foundation using the selected engine configuration.
 
 ## Turn lifecycle
 
@@ -146,3 +146,91 @@ environment. They do not establish real-device cancellation, live voice latency,
 streamed llama.cpp response parsing, tool permissions, UI behavior or desktop
 packaging. Phase 1 engine measurements remain separate evidence in
 [verification.md](verification.md).
+
+## Phase 3 capture increment
+
+`audio/capture.py` implements the capture protocol with a short-lived subprocess
+per recording. The child imports sounddevice after a typed request; importing the
+backend or listing devices never starts recording. `audio/worker.py` owns the
+PortAudio stream, reads mono signed 16-bit samples at the selected device's default
+rate, closes it, and uses existing PyAV resampling to return 16 kHz PCM. No WAV files
+are created. Native diagnostics are discarded; the parent receives allowlisted
+error codes through private pipes.
+
+Recording is bounded by both a frame count and wall-clock duration, with a maximum
+of 30 seconds. A separate parent watchdog terminates a worker blocked in a native
+read when the release signal is lost. Start/finish waits are bounded to four
+seconds. Abort sends termination, waits up to 250 ms, then uses a forced kill and
+waits up to 500 ms to reap the child. The adapter cannot be reused until cleanup
+finishes; cancellation of a caller does not abandon that cleanup. Normal backend
+shutdown must still await controller cleanup. Abrupt parent-process termination
+during a hung native call has not been verified by this increment.
+
+The controller now gives cancelled device operations the bounded cleanup window
+to finish. Operations still active after abort/stop require a backend restart;
+operations successfully reaped during cleanup permit another turn. Tests cover
+both outcomes, including a synthetic process that ignores normal termination.
+
+Python adapters run on the same event loop; only the private child handles blocking
+audio operations. This process-per-turn design prioritizes reliable device release.
+Its real startup cost and microphone behavior are still to be measured. No runtime
+controls have been exposed yet: authentication/origin checks and UI disconnect
+cancellation remain prerequisites for connecting the future desktop interface.
+
+## Phase 3 VAD and transcription increment
+
+`speech/adapters.py` provides separate `SileroVAD` and `WhisperTranscriber`
+boundaries sharing a `SpeechWorker`. The worker starts lazily, loads the local
+small.en model on CPU/int8, and retains it between successful requests. It accepts
+one request at a time and rejects overlap. PCM is limited to mono 16 kHz and 30
+seconds; responses are validated and transcripts bounded to 8192 characters.
+Heavy imports, bundled Silero inference and Whisper's lazy segment iteration all
+run in the child process, outside the API event loop.
+
+Whisper's standalone adapter repeats the speech check and enables the decoder's
+integrated VAD filter. This intentionally guards callers that bypass the controller;
+empty/silent input returns an empty transcript without invoking the decoder.
+There is no transcript prompt carried between calls. The controller retains only
+its bounded in-memory conversation. Neither the adapters nor the worker log content.
+
+Cancelling or timing out a request terminates/reaps the child, using forced kill
+if normal termination takes longer than 250 ms. The next request reloads the local
+model. `close()` permanently shuts down the worker. The controller now allows an
+additional bounded cleanup interval for cancelled inference tasks to settle before
+declaring a turn finished; lingering work still quarantines subsequent turns.
+An application runtime must close both the controller and its owned speech worker.
+
+`TranscriptionComponents` explicitly configures a capture/VAD/STT-only controller.
+Its successful state path is `idle → listening → transcribing → idle`, publishing
+one user message. Silence ends with `no_speech` and no conversation message. The
+existing full `Components` configuration retains Qwen/TTS/playback orchestration.
+There are no fake assistant responses or dummy speech outputs in transcription mode.
+
+`python -m voice_assistant.transcribe` wires these adapters into a timed terminal
+diagnostic. Model warmup happens before microphone permission is enabled; errors
+and state changes are displayed. Its transcript output is an explicit user-facing
+view, not application logging. This command adds no HTTP routes or network listeners.
+The FastAPI factory remains health-only, with default readiness still 503 until an
+application runtime wires its probes. Authentication, origin validation, disconnect
+cancellation and the React/Tauri hold control remain subsequent work.
+
+## Authenticated transcription desktop
+
+`desktop_server` creates `TranscriptionRuntime` and opts into `DesktopTransport`;
+the original health launcher does not expose controls. The runtime owns capture,
+a resident speech worker and a transcription-only controller. Preparation loads
+local weights and enumerates devices with microphone permission off. Device changes
+require an inactive controller; enabling the microphone requires a loaded model.
+
+The WebSocket transport authenticates before emitting any state, permits one owner,
+and uses independent receive, serialized control and send loops. Heartbeat traffic
+therefore remains responsive while model preparation waits. Bounded queues prevent
+unlimited control backlog. Ownership ends only after disconnect cleanup disables
+the microphone; AnyIO shielding protects this cleanup during ASGI cancellation.
+
+The React client owns connection deadlines, command acknowledgements and the held
+turn ID. Presentation components translate pointer/keyboard/focus gestures into
+client calls and render validated authoritative snapshots. The Rust shell provides
+a window only: no native command capabilities, engine logic or backend spawning.
+See [desktop-development.md](desktop-development.md) for protocol limits, pairing,
+privacy boundaries and manual acceptance.

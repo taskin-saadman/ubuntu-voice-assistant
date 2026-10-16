@@ -275,3 +275,63 @@ async def test_cleanup_timeout_does_not_leave_controller_waiting_forever() -> No
     assert controller.events.read()[-1].outcome == "failed"
     with pytest.raises(ControllerRejected):
         controller.reset()
+
+
+async def test_cooperative_device_cancellation_can_finish_during_cleanup() -> None:
+    stopped = asyncio.Event()
+
+    class ReapingCapture(FakeEngines):
+        async def start(self) -> None:
+            await self.step("start")
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await stopped.wait()
+                raise
+
+        async def abort(self) -> None:
+            await self.step("abort")
+            stopped.set()
+            await asyncio.sleep(0)
+
+    fake = ReapingCapture()
+    controller = Controller(fake.components())
+    await controller.set_microphone(True)
+    turn = controller.begin_turn()
+    await fake.reached("start")
+    await controller.cancel(turn)
+    assert stopped.is_set() and not controller.busy
+    controller.reset()
+    assert controller.state == State.IDLE
+    await controller.close()
+
+
+async def test_device_operation_outliving_cleanup_requires_restart_even_after_it_finishes() -> None:
+    gate = asyncio.Event()
+
+    class BrokenCapture(FakeEngines):
+        async def start(self) -> None:
+            await self.step("start")
+            while not gate.is_set():
+                try:
+                    await gate.wait()
+                except asyncio.CancelledError:
+                    continue
+
+    fake = BrokenCapture()
+    controller = Controller(fake.components())
+    try:
+        await controller.set_microphone(True)
+        turn = controller.begin_turn()
+        await fake.reached("start")
+        await controller.cancel(turn)
+        assert controller.state == State.ERROR and controller.busy
+        gate.set()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert not controller.busy
+        with pytest.raises(ControllerRejected):
+            controller.reset()
+    finally:
+        gate.set()
+        await controller.close()

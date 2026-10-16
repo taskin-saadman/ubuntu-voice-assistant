@@ -218,3 +218,266 @@ the new controller. No model, microphone or speaker was needed by these tests.
 The GitHub Actions workflow now includes these backend checks; a hosted run has
 not been observed for this branch. The next implementation phase is push-to-talk
 capture and transcription with authenticated UI transport.
+
+## Phase 3, first increment: microphone adapter
+
+Verified locally on 2026-10-17 with Python 3.12.14 and the locked uv environment:
+
+| Check | Result |
+| --- | --- |
+| Locked development dependency synchronization | Passed |
+| Ruff lint and formatting | Passed, 22 Python files |
+| Strict mypy | Passed, 22 Python files |
+| Full suite with warnings treated as errors and asyncio debug enabled | 86 tests passed |
+| Focused audio suite | 35 tests passed |
+| YAML lint and offline workflow security checks | Passed |
+| Whitespace/diff validation | Passed |
+| Actual input-enumeration worker with missing PortAudio | Returned the expected safe prerequisite error |
+
+The capture tests use generated tones, zero-valued PCM and controlled subprocesses.
+They verify 8/16/44.1/48 kHz normalization, finite recording limits, overflow and
+short-read failures, device closure, single ownership, stale startup cancellation,
+malformed/oversized IPC, worker termination and forced kill, lost-release cleanup,
+and cancellation of a cleanup waiter. Controller integration tests cover
+microphone-off, cancellation during startup/finish, silence through a fake VAD,
+recording timeout and reuse after successful cleanup.
+
+These tests exposed and fixed a Phase 2 controller issue: cooperative device
+cancellation was being treated as a permanent cleanup failure before its cleanup
+window had elapsed. Regression tests verify successful cleanup allows reuse and
+a resource operation outliving cleanup still requires restart.
+
+The initial enumeration check did not record audio. At that point, `apt-cache policy`
+reported `libportaudio2` was not installed, and no OS packages had been changed.
+Subsequent user-run hardware checks are recorded below.
+There is no new claim of end-to-end offline voice operation. VAD/Whisper wiring,
+authenticated transport and the React/Tauri window remain for later Phase 3
+increments; the Phase 3 exit criterion is not yet satisfied.
+
+### User-run capture and cancellation checks
+
+The user supplied terminal output showing installation of `libportaudio2`
+19.7.0+git20260206.e1b70d33-0ubuntu1, successful device enumeration, and the
+[manual capture check](setup-ubuntu.md) with the built-in analog input selected
+as device index 23. Enumeration reported its default sample rate as 48000 Hz.
+Indices are session-dependent; enumerate again before selecting an input.
+
+| Check | Observed result |
+| --- | --- |
+| Three normal captures before interruption | Each returned 2.98 s, 16000 Hz, mono int16 |
+| Ctrl+C during a subsequent recording | `CancelledError` followed by `KeyboardInterrupt`; terminal prompt returned |
+| Normal capture after interruption | Returned 2.98 s, 16000 Hz, mono int16 |
+
+The traceback is expected from the diagnostic's uncaught keyboard interrupt. Its
+`finally` block awaits capture abort, and no cleanup exception was reported. The
+successful subsequent capture demonstrates the selected input could reopen.
+These observations support real capture, resampling and recovery after interruption;
+they do not independently prove that the device indicator cleared or that no worker
+remained after cancellation. Microphone-indicator behavior was not reported.
+
+The diagnostic kept audio in memory and printed metadata only. No recordings or
+device inventory containing personal identifiers were added to the repository.
+Speech quality, live VAD/transcription, startup latency, physical device disconnects
+and real-device lost-release behavior remain unverified. `UV_OFFLINE=true` was set,
+but this capture check was not a network-traffic audit or a complete voice turn.
+
+## Phase 3, second increment: local VAD and transcription
+
+Verified locally on 2026-10-17 with the locked Python 3.12 environment:
+
+| Check | Result |
+| --- | --- |
+| Ruff lint/format and strict mypy | Passed, 31 Python files |
+| Full suite, warnings as errors, offline flags and asyncio debug enabled | 109 tests passed |
+| Speech adapter tests | 17 passed |
+| Transcription controller/diagnostic tests | 6 passed |
+| Diagnostic `--help` | Passed; no model/device initialization |
+| Diagnostic with a nonexistent model directory | Safe initialization error and exit 1; capture never enabled |
+
+Tests cover incomplete model directories (including missing tokenizer files),
+bounded settings/IPC, float32 PCM conversion, real bundled-Silero rejection of
+generated silence, lazy segment consumption, transcript limits, resident worker
+reuse, overlapping requests, malformed replies, forced termination, deadlines and
+reload after cancellation. Transcription-only controller tests verify state and
+message behavior, silence skipping STT, no LLM/TTS calls, inference cancellation
+cleanup and diagnostic shutdown. CI needs no microphone or downloaded Whisper
+weights; the Silero model is bundled in the existing faster-whisper dependency.
+
+### Native worker smoke check with synthetic speech
+
+A short nonpersonal sentence was synthesized with the existing local Piper voice
+into memory, normalized to 16 kHz PCM, and passed to the new speech adapters. This
+check used the downloaded small.en model with CPU/int8, eight threads and one
+worker. It did not open the microphone, read personal recordings or write audio files.
+
+| Observation | Result |
+| --- | --- |
+| Worker startup, Whisper loading and VAD warmup | 0.76 s |
+| One second of generated zero-valued PCM | VAD false; standalone transcript empty |
+| Piper-generated sentence | VAD true |
+| First transcription through the resident worker | Correct sentence, 0.98 s |
+| Second transcription through the same worker | Correct sentence, 0.93 s |
+| Worker shutdown | Completed successfully |
+
+Transcription timings include IPC and filtering but exclude Piper synthesis and
+microphone capture. These are two observations of one synthetic utterance, not a
+representative latency distribution or live recognition accuracy measurement.
+Offline/telemetry-disable flags were set; no packet capture was performed.
+
+### User-reported microphone-to-transcript acceptance
+
+After receiving the diagnostic instructions, the user confirmed that the microphone
+tests passed and worked as expected. This confirms the requested manual checks:
+
+- Spoken input produced a transcript and a completed turn.
+- Staying quiet produced `no_speech` without a transcript.
+- Ctrl+C during recording, followed by a normal retry, worked as expected.
+
+This is user-reported acceptance of the microphone → VAD → Whisper diagnostic;
+no additional terminal output, recordings or transcripts were supplied or committed.
+No latency or quantitative recognition-accuracy measurement is inferred from it.
+Noisy-room behavior, physical device disconnects, cancellation during inference
+and explicit microphone-indicator observations remain separate verification items.
+
+The desktop hold control and authenticated transport are not implemented yet,
+so Phase 3's complete exit criterion remains pending. See
+[setup-ubuntu.md](setup-ubuntu.md) for the reproducible diagnostic procedure.
+
+## Phase 3, third increment: authenticated desktop transcription preview
+
+Implemented on 2026-10-17. This supersedes the earlier note that transport and the
+hold control were not yet implemented; hardware acceptance of the new UI is pending.
+
+Local verification: 127 backend tests and 19 frontend tests passed. Ruff lint/format
+and strict mypy passed across 36 Python files; strict TypeScript/build and Rust
+format checks passed. The full Python run enabled offline flags, warnings as errors
+and asyncio debug. Native compilation remains blocked as described below.
+
+- Backend origin/authentication/ownership tests cover missing or untrusted origins,
+  wrong keys, query credentials, a second client, stale release IDs, replayed
+  commands, malformed/binary frames, disconnect and missing heartbeat cleanup.
+- A stalled model-preparation test verifies that ping acknowledgements continue
+  independently. Runtime tests enforce loaded-model and inactive-device rules.
+- Frontend tests cover authenticated frames, no token in URL/view/browser storage,
+  quick release before acknowledgement, duplicate presses, microphone-off guards,
+  disconnect/timeouts, stale snapshots, invalid responses, keyboard repeat,
+  pointer release/lost capture, Escape, focus loss and hidden-page cancellation.
+- A separate real loopback Uvicorn `websockets-sansio` smoke check authenticated,
+  ran a synthetic turn, received its transcript and observed microphone permission
+  disabled after disconnect. It used fake engines, no microphone and no model.
+- Strict TypeScript and Vite production build passed. Rust formatting passed.
+  YAML lint and offline zizmor workflow checks passed.
+- `cargo check --locked` was attempted and failed because `dbus-1` development
+  metadata was missing. GTK3 and WebKitGTK4.1 development metadata are also absent.
+  No OS packages were installed. Native compilation/launch remains unverified.
+- Visual browser review was unavailable: the computer-use tool reported no connected
+  browser. DOM tests are not a substitute for reviewing the rendered window.
+
+The GitHub desktop job now includes locked frontend tests/build and native Cargo
+checking on Ubuntu with system prerequisites. It has not yet run on GitHub.
+No release bundle or publication was performed. Full UI-to-microphone acceptance,
+visible microphone-indicator cleanup, native focus behavior, reduced-motion visual
+review and a Wi-Fi-disabled run remain the checks in
+[desktop-development.md](desktop-development.md). The existing terminal microphone
+acceptance does not prove these new UI behaviors on the laptop.
+
+
+### Native build after system prerequisite installation
+
+On 2026-10-17, the user reported installing the requested system development
+libraries. Subsequent local checks confirmed WebKitGTK 2.52.6, GTK 3.24.52 and
+D-Bus 1.16.2 through pkg-config, resolving the earlier native-build blocker.
+
+| Check | Result |
+| --- | --- |
+| `npm run build` | Strict TypeScript and Vite build passed |
+| `cargo +1.98.1 check --locked --manifest-path desktop/src-tauri/Cargo.toml` | Passed |
+| `cargo +1.98.1 build --offline --locked -j 2 --manifest-path desktop/src-tauri/Cargo.toml` | Debug executable compiled and linked successfully |
+| `cargo +1.98.1 fmt --manifest-path desktop/src-tauri/Cargo.toml -- --check` | Passed |
+| Shared-library resolution for the debug executable | No missing libraries reported by `ldd` |
+
+The exact Rust 1.98.1 toolchain was provisioned by rustup before the checks;
+that setup used network access. The subsequent Cargo build used cached crates
+with `--offline`, which does not establish offline operation of the running app.
+Generated Tauri schema output is now ignored by Git. No application logic changed,
+so backend and DOM suites were not repeated after the prior passing runs.
+
+The executable was not launched and no microphone was opened in this verification.
+Window appearance, native focus/cancellation behavior, microphone capture and a
+Wi-Fi-disabled UI turn still require the manual acceptance procedure in
+[desktop-development.md](desktop-development.md). No release was packaged or pushed.
+
+### GTK startup failure from the VS Code Snap environment
+
+The user's subsequent `npm run tauri -- dev` compiled and launched the executable,
+then aborted in GLib/GIO because the xsettings schema lacked `antialiasing`.
+Inspection found that the executable resolved the system GTK/GDK libraries while
+the terminal inherited `GSETTINGS_SCHEMA_DIR` pointing into VS Code Snap revision
+268. Other GTK/data search variables also referenced the Snap.
+
+A separate Python ctypes probe called the system `gtk_init_check` without creating
+an application window or opening audio devices. Core dumps were disabled for the
+probe. Results observed on 2026-10-17:
+
+- Inherited environment: reproduced the exact schema-key error; process exit -6.
+- Only `GSETTINGS_SCHEMA_DIR=/usr/share/glib-2.0/schemas`: GTK initialization returned
+  true and process exit 0.
+- System schema plus system XDG data directories: also passed; the extra override
+  was unnecessary for this failure and is not part of the recommended command.
+
+The documented workaround sets the single variable for the Tauri launch. No OS
+configuration or application code changed. GTK initialization passing does not
+establish that WebKit rendering or the complete native microphone flow works;
+those remain the next user acceptance checks.
+
+### Native UI rendering and transcript display
+
+On 2026-10-17, after the schema-only workaround, the user supplied a screenshot
+showing WebKit's internal-error page. Inspection still found Snap GTK/GIO module
+paths in the inherited terminal environment. The next launch instructions cleared
+`GTK_PATH`, `GTK_EXE_PREFIX`, `GTK_IM_MODULE_FILE` and `GIO_MODULE_DIR`, selected
+system schemas, and restricted XDG data directories to the system locations.
+
+The user's subsequent screenshot visibly confirms:
+
+- The native Local Voice window renders the React interface instead of the error page.
+- The UI reports a local connection and exposes the loaded-model device controls.
+- Multiple user transcript entries are displayed in the conversation panel.
+- Microphone permission is shown as disabled and the hold button is disabled.
+
+This is screenshot evidence from the target laptop, not an independently observed
+recording session. No screenshot or transcript text was copied into the repository.
+The combined environment workaround succeeded at rendering; the exact offending
+GTK/GIO override was not isolated. The screenshot also shows vertical overflow,
+so compact-window layout remains a visual refinement item.
+
+Native pointer/keyboard state timing, silence behavior, Escape/focus-loss cleanup,
+physical microphone-indicator observations, retry and Wi-Fi-disabled UI operation
+still need explicit acceptance. Qwen replies and Piper playback remain unwired in
+this preview. These documentation-only updates were checked with `git diff --check`;
+no application logic changed and automated suites were not repeated.
+
+### User acceptance of native silence, cancellation and recovery
+
+On 2026-10-17, the user confirmed that all three requested follow-up checks passed:
+
+- Silence produced a no-speech notice.
+- Escape or switching windows stopped recording and cleared Ubuntu's microphone
+  indicator.
+- Re-enabling the microphone allowed another successful turn.
+
+Together with the preceding native UI screenshot and displayed transcripts, this
+records user acceptance of the core Phase 3 push-to-talk transcription flow and
+its tested cancellation/recovery behavior. This supersedes the pending status of
+these specific checks above. It is user-reported verification, not independently
+captured timing or device telemetry.
+
+The confirmation is scoped to the three checks requested immediately beforehand.
+Physical-device disconnection, the full keyboard/pointer edge-case matrix, native
+reconnect/second-window rejection, repeated-turn measurements and Wi-Fi-disabled
+UI operation remain separate acceptance items. Phase 4 connects Qwen conversation;
+Phase 5 adds Piper and playback. The complete microphone-to-speaker milestone is
+not yet implemented.
+
+No application code changed in this acceptance update. `git diff --check` passed;
+automated tests were not repeated for documentation-only changes.

@@ -51,9 +51,53 @@ jobs:
       - name: Type check backend
         run: uv run --offline --locked mypy
 
-      - name: Test backend with fake adapters
+      - name: Test backend without devices or downloaded models
         env:
           HF_HUB_OFFLINE: "1"
           HF_HUB_DISABLE_TELEMETRY: "1"
           PYTHONASYNCIODEBUG: "1"
         run: uv run --offline --locked pytest -W error
+
+  desktop-checks:
+    name: Desktop checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6
+        with:
+          node-version: '22.22.1'
+          package-manager-cache: false
+
+      - name: Install locked frontend dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Test desktop controls
+        run: npm test
+
+      - name: Type check and build frontend
+        run: npm run build
+
+      - name: Install native build prerequisites on CI runner
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
+
+      - name: Select Rust toolchain
+        run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt
+
+      - name: Check Rust formatting
+        run: cargo +1.98.1 fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Check native desktop shell
+        run: cargo +1.98.1 check --locked --manifest-path src-tauri/Cargo.toml
