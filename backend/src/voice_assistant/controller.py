@@ -41,14 +41,18 @@ class Deadlines(Schema):
 
 
 @dataclass(frozen=True)
-class Components:
+class TranscriptionComponents:
     capture: Capture
     vad: VoiceActivityDetector
     stt: Transcriber
+    history: ConversationStore
+
+
+@dataclass(frozen=True)
+class Components(TranscriptionComponents):
     llm: LanguageModel
     tts: Synthesizer
     playback: Playback
-    history: ConversationStore
 
 
 class ControllerRejected(RuntimeError):
@@ -89,7 +93,9 @@ class Controller:
     tasks that ignore cancellation quarantine the controller until they finish.
     """
 
-    def __init__(self, components: Components, deadlines: Deadlines | None = None) -> None:
+    def __init__(
+        self, components: TranscriptionComponents, deadlines: Deadlines | None = None
+    ) -> None:
         self.components = components
         self.deadlines = deadlines or Deadlines()
         self.events = EventBuffer()
@@ -284,6 +290,8 @@ class Controller:
         if not text.strip():
             raise _NoSpeech
         self._message(Message(role="user", content=text.strip()))
+        if not isinstance(c, Components):
+            return
         self._state(State.THINKING)
         answer = await self._perform(
             lambda: c.llm.respond(c.history.messages()), d.generation, ErrorCode.LLM_UNAVAILABLE
@@ -331,7 +339,10 @@ class Controller:
         finally:
             # Also invalidate a playback callback retained by a misbehaving adapter.
             self._cancel.set()
-            for operation in (self.components.capture.abort, self.components.playback.stop):
+            cleanup = [self.components.capture.abort]
+            if isinstance(self.components, Components):
+                cleanup.append(self.components.playback.stop)
+            for operation in cleanup:
                 try:
                     await self._perform(
                         operation, self.deadlines.cleanup, ErrorCode.CLEANUP_FAILED, cleanup=True
@@ -340,6 +351,10 @@ class Controller:
                     self._cleanup_failed = True
                     outcome = "failed"
                     self._error(error.failure)
+            # Native inference cancellation can also need time to reap its worker.
+            pending = {task for task in self._pending if not task.done()}
+            if pending:
+                await asyncio.wait(pending, timeout=self.deadlines.cleanup)
             # Give cooperative cancellation the bounded cleanup window to finish.
             # A resource operation still running after abort/stop could reopen a device.
             resources_active = any(not task.done() for task in self._resource_tasks)
