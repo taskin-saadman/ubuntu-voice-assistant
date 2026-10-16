@@ -324,8 +324,21 @@ microphone capture. These are two observations of one synthetic utterance, not a
 representative latency distribution or live recognition accuracy measurement.
 Offline/telemetry-disable flags were set; no packet capture was performed.
 
-Live microphone → VAD → Whisper accuracy, quiet-room/noisy-room filtering, visible
-microphone privacy behavior and cancellation/recovery through the diagnostic still
-need the user-run checks in [setup-ubuntu.md](setup-ubuntu.md). The desktop hold
-control and authenticated transport are not implemented yet, so Phase 3's complete
-exit criterion remains pending.
+### User-reported microphone-to-transcript acceptance
+
+After receiving the diagnostic instructions, the user confirmed that the microphone
+tests passed and worked as expected. This confirms the requested manual checks:
+
+- Spoken input produced a transcript and a completed turn.
+- Staying quiet produced `no_speech` without a transcript.
+- Ctrl+C during recording, followed by a normal retry, worked as expected.
+
+This is user-reported acceptance of the microphone → VAD → Whisper diagnostic;
+no additional terminal output, recordings or transcripts were supplied or committed.
+No latency or quantitative recognition-accuracy measurement is inferred from it.
+Noisy-room behavior, physical device disconnects, cancellation during inference
+and explicit microphone-indicator observations remain separate verification items.
+
+The desktop hold control and authenticated transport are not implemented yet,
+so Phase 3's complete exit criterion remains pending. See
+[setup-ubuntu.md](setup-ubuntu.md) for the reproducible diagnostic procedure.
