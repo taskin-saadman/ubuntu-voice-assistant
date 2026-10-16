@@ -98,6 +98,7 @@ class Controller:
         self._turn_id: UUID | None = None
         self._task: asyncio.Task[None] | None = None
         self._pending: set[asyncio.Task[object]] = set()
+        self._resource_tasks: set[asyncio.Task[object]] = set()
         self._cancel = asyncio.Event()
         self._released = asyncio.Event()
         self._closed = False
@@ -203,11 +204,18 @@ class Controller:
             await self.set_microphone(False)
             self._closed = True
 
-    def _track(self, task: asyncio.Task[object]) -> None:
+    def _track(self, task: asyncio.Task[object], code: ErrorCode) -> None:
         self._pending.add(task)
+        if code in {
+            ErrorCode.CAPTURE_FAILED,
+            ErrorCode.PLAYBACK_FAILED,
+            ErrorCode.CLEANUP_FAILED,
+        }:
+            self._resource_tasks.add(task)
 
         def completed(finished: asyncio.Task[object]) -> None:
             self._pending.discard(finished)
+            self._resource_tasks.discard(finished)
             if not finished.cancelled():
                 finished.exception()  # Consume late failures without logging sensitive details.
 
@@ -225,7 +233,7 @@ class Controller:
             return await operation()
 
         task = asyncio.create_task(invoke())
-        self._track(task)
+        self._track(task, code)
         cancellation = asyncio.create_task(self._cancel.wait())
         try:
             if not cleanup and self._cancel.is_set():
@@ -251,15 +259,8 @@ class Controller:
         finally:
             cancellation.cancel()
             await asyncio.gather(cancellation, return_exceptions=True)
-            if not task.done():
+            if not task.done() and not task.cancelling():
                 task.cancel()
-                if code in {
-                    ErrorCode.CAPTURE_FAILED,
-                    ErrorCode.PLAYBACK_FAILED,
-                    ErrorCode.CLEANUP_FAILED,
-                }:
-                    # An adapter still running after abort could reopen a device.
-                    self._cleanup_failed = True
 
     async def _pipeline(self) -> None:
         c, d = self.components, self.deadlines
@@ -339,7 +340,12 @@ class Controller:
                     self._cleanup_failed = True
                     outcome = "failed"
                     self._error(error.failure)
-            if self._pending and outcome != "failed":
+            # Give cooperative cancellation the bounded cleanup window to finish.
+            # A resource operation still running after abort/stop could reopen a device.
+            resources_active = any(not task.done() for task in self._resource_tasks)
+            if resources_active:
+                self._cleanup_failed = True
+            if resources_active or (self._pending and outcome != "failed"):
                 outcome = "failed"
                 self._error(
                     Failure(
