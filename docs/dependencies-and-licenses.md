@@ -35,3 +35,24 @@ Sources: [Pydantic](https://pypi.org/project/pydantic/),
 [pytest-asyncio](https://pypi.org/project/pytest-asyncio/),
 [Ruff](https://pypi.org/project/ruff/), [mypy](https://pypi.org/project/mypy/),
 [uv_build](https://pypi.org/project/uv-build/).
+
+## Phase 3 microphone capture
+
+`sounddevice >=0.5.6,<0.6` (MIT) provides Python access to PortAudio input devices.
+It is the audio library selected in the implementation plan; the existing engines
+do not provide device capture. Its locked transitive dependencies are CFFI 2.1.1
+(MIT-0) and pycparser 3.11 (BSD-3-Clause), checked against upstream package metadata.
+Linux also needs the system `libportaudio2` library (PortAudio's permissive license).
+No OS package is installed by uv or application startup.
+
+Resampling reuses PyAV 18.1.0, already locked for faster-whisper, rather than adding
+another audio conversion dependency. The adapter imports sounddevice only in its
+private worker after an explicit capture or enumeration request. It makes no
+network requests or recording-file writes. Package downloads still use PyPI, and
+OS package installation uses the configured Ubuntu repositories.
+
+Sources: [sounddevice metadata](https://pypi.org/project/sounddevice/0.5.6/),
+[CFFI metadata](https://pypi.org/project/cffi/2.1.1/),
+[pycparser metadata](https://pypi.org/project/pycparser/3.11/),
+[sounddevice installation](https://python-sounddevice.readthedocs.io/en/latest/installation.html),
+[PortAudio license](https://www.portaudio.com/license.html).
