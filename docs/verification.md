@@ -247,10 +247,36 @@ cancellation was being treated as a permanent cleanup failure before its cleanup
 window had elapsed. Regression tests verify successful cleanup allows reuse and
 a resource operation outliving cleanup still requires restart.
 
-The real enumeration check did not record audio. `apt-cache policy` reported
-`libportaudio2` was not installed, and no OS packages were changed. Real microphone
-capture, device-release behavior and startup latency remain unverified until the
-prerequisite and the [manual capture checks](setup-ubuntu.md) are completed.
+The initial enumeration check did not record audio. At that point, `apt-cache policy`
+reported `libportaudio2` was not installed, and no OS packages had been changed.
+Subsequent user-run hardware checks are recorded below.
 There is no new claim of end-to-end offline voice operation. VAD/Whisper wiring,
 authenticated transport and the React/Tauri window remain for later Phase 3
 increments; the Phase 3 exit criterion is not yet satisfied.
+
+### User-run capture and cancellation checks
+
+The user supplied terminal output showing installation of `libportaudio2`
+19.7.0+git20260206.e1b70d33-0ubuntu1, successful device enumeration, and the
+[manual capture check](setup-ubuntu.md) with the built-in analog input selected
+as device index 23. Enumeration reported its default sample rate as 48000 Hz.
+Indices are session-dependent; enumerate again before selecting an input.
+
+| Check | Observed result |
+| --- | --- |
+| Three normal captures before interruption | Each returned 2.98 s, 16000 Hz, mono int16 |
+| Ctrl+C during a subsequent recording | `CancelledError` followed by `KeyboardInterrupt`; terminal prompt returned |
+| Normal capture after interruption | Returned 2.98 s, 16000 Hz, mono int16 |
+
+The traceback is expected from the diagnostic's uncaught keyboard interrupt. Its
+`finally` block awaits capture abort, and no cleanup exception was reported. The
+successful subsequent capture demonstrates the selected input could reopen.
+These observations support real capture, resampling and recovery after interruption;
+they do not independently prove that the device indicator cleared or that no worker
+remained after cancellation. Microphone-indicator behavior was not reported.
+
+The diagnostic kept audio in memory and printed metadata only. No recordings or
+device inventory containing personal identifiers were added to the repository.
+Speech quality, live VAD/transcription, startup latency, physical device disconnects
+and real-device lost-release behavior remain unverified. `UV_OFFLINE=true` was set,
+but this capture check was not a network-traffic audit or a complete voice turn.

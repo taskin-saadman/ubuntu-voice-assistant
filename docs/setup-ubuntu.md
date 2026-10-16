@@ -11,8 +11,9 @@ window remain subsequent increments. This is not yet a runnable voice assistant.
 
 The `sounddevice` Python dependency is managed by uv. On Linux it also needs the
 system PortAudio library. The initial inspection found `libportaudio2` missing on
-the target laptop. Installation is a separate OS change for the user to authorize
-or perform:
+the target laptop; the user has since installed it and supplied successful capture
+results. On a fresh machine, installation is a separate OS change for the user to
+authorize or perform:
 
 ```bash
 sudo apt install libportaudio2
