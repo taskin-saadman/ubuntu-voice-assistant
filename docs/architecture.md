@@ -213,3 +213,24 @@ view, not application logging. This command adds no HTTP routes or network liste
 The FastAPI factory remains health-only, with default readiness still 503 until an
 application runtime wires its probes. Authentication, origin validation, disconnect
 cancellation and the React/Tauri hold control remain subsequent work.
+
+## Authenticated transcription desktop
+
+`desktop_server` creates `TranscriptionRuntime` and opts into `DesktopTransport`;
+the original health launcher does not expose controls. The runtime owns capture,
+a resident speech worker and a transcription-only controller. Preparation loads
+local weights and enumerates devices with microphone permission off. Device changes
+require an inactive controller; enabling the microphone requires a loaded model.
+
+The WebSocket transport authenticates before emitting any state, permits one owner,
+and uses independent receive, serialized control and send loops. Heartbeat traffic
+therefore remains responsive while model preparation waits. Bounded queues prevent
+unlimited control backlog. Ownership ends only after disconnect cleanup disables
+the microphone; AnyIO shielding protects this cleanup during ASGI cancellation.
+
+The React client owns connection deadlines, command acknowledgements and the held
+turn ID. Presentation components translate pointer/keyboard/focus gestures into
+client calls and render validated authoritative snapshots. The Rust shell provides
+a window only: no native command capabilities, engine logic or backend spawning.
+See [desktop-development.md](desktop-development.md) for protocol limits, pairing,
+privacy boundaries and manual acceptance.

@@ -77,3 +77,43 @@ Sources: [NumPy 2.5.4 metadata](https://pypi.org/project/numpy/2.5.4/),
 [faster-whisper usage and VAD](https://github.com/SYSTRAN/faster-whisper#usage),
 [pinned tokenizer loading](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/transcribe.py),
 [pinned bundled VAD](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/vad.py).
+
+## Phase 3 authenticated desktop session
+
+| Dependency | Purpose | Reviewed upstream license |
+| --- | --- | --- |
+| websockets 17.2 | Uvicorn's explicit Sans-I/O WebSocket implementation | BSD-3-Clause |
+| AnyIO 4.15.1 | Protect microphone cleanup against ASGI cancellation; already transitive through FastAPI | MIT |
+| React / React DOM 19.3.1 | Desktop view and accessible controls | MIT |
+| TypeScript 7.0.2 | Strict frontend type checking | Apache-2.0 |
+| Vite 8.3.4 / React plugin 6.1.2 | Local development server and frontend assets | MIT |
+| Vitest 5.0.5 / jsdom 29.1.1 / Testing Library React 16.3.3 | DOM, gesture and connection tests without hardware | MIT |
+| React/DOM/Node type definitions | Type checking | MIT |
+| Tauri CLI 2.12.3, tauri 2.12.4, tauri-build 2.7.3 | Native Linux window around the local interface | MIT OR Apache-2.0 |
+
+Direct npm dependencies are exact-pinned; `desktop/package-lock.json` and
+`desktop/src-tauri/Cargo.lock` lock the full graphs. Python remains managed by uv.
+Node 22.22.1 and Rust 1.98.1 are the local/CI baselines. jsdom 29 is selected for
+this Node version. No frontend WebSocket or schema framework was added: browser
+WebSocket and a bounded protocol parser cover this small transport.
+
+npm installation contacts the npm registry; Cargo contacts crates.io; Rust
+installation contacts Rust's distribution servers; apt contacts Ubuntu repositories.
+GitHub Actions installs these on its disposable runner. The application does not
+install OS dependencies or download models. Vite's development server and HMR use
+loopback only; production assets bundle local code, styles and system fonts.
+The browser client only opens `ws://127.0.0.1:8765/session`. Native Tauri capabilities
+are empty, with no shell, filesystem, updater or telemetry plugins enabled.
+Distribution still requires a complete transitive/system-library license review;
+no release packaging or publishing is enabled here.
+
+Sources: [websockets](https://pypi.org/project/websockets/17.2/),
+[AnyIO](https://pypi.org/project/anyio/4.15.1/),
+[React license](https://github.com/facebook/react/blob/main/LICENSE),
+[TypeScript license](https://github.com/microsoft/TypeScript/blob/main/LICENSE.txt),
+[Vite license](https://github.com/vitejs/vite/blob/main/LICENSE),
+[Vitest license](https://github.com/vitest-dev/vitest/blob/main/LICENSE),
+[jsdom license](https://github.com/jsdom/jsdom/blob/main/LICENSE.txt),
+[Testing Library license](https://github.com/testing-library/react-testing-library/blob/main/LICENSE),
+[Tauri licenses](https://github.com/tauri-apps/tauri),
+[Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/).

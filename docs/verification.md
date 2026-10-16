@@ -342,3 +342,41 @@ and explicit microphone-indicator observations remain separate verification item
 The desktop hold control and authenticated transport are not implemented yet,
 so Phase 3's complete exit criterion remains pending. See
 [setup-ubuntu.md](setup-ubuntu.md) for the reproducible diagnostic procedure.
+
+## Phase 3, third increment: authenticated desktop transcription preview
+
+Implemented on 2026-10-17. This supersedes the earlier note that transport and the
+hold control were not yet implemented; hardware acceptance of the new UI is pending.
+
+Local verification: 127 backend tests and 19 frontend tests passed. Ruff lint/format
+and strict mypy passed across 36 Python files; strict TypeScript/build and Rust
+format checks passed. The full Python run enabled offline flags, warnings as errors
+and asyncio debug. Native compilation remains blocked as described below.
+
+- Backend origin/authentication/ownership tests cover missing or untrusted origins,
+  wrong keys, query credentials, a second client, stale release IDs, replayed
+  commands, malformed/binary frames, disconnect and missing heartbeat cleanup.
+- A stalled model-preparation test verifies that ping acknowledgements continue
+  independently. Runtime tests enforce loaded-model and inactive-device rules.
+- Frontend tests cover authenticated frames, no token in URL/view/browser storage,
+  quick release before acknowledgement, duplicate presses, microphone-off guards,
+  disconnect/timeouts, stale snapshots, invalid responses, keyboard repeat,
+  pointer release/lost capture, Escape, focus loss and hidden-page cancellation.
+- A separate real loopback Uvicorn `websockets-sansio` smoke check authenticated,
+  ran a synthetic turn, received its transcript and observed microphone permission
+  disabled after disconnect. It used fake engines, no microphone and no model.
+- Strict TypeScript and Vite production build passed. Rust formatting passed.
+  YAML lint and offline zizmor workflow checks passed.
+- `cargo check --locked` was attempted and failed because `dbus-1` development
+  metadata was missing. GTK3 and WebKitGTK4.1 development metadata are also absent.
+  No OS packages were installed. Native compilation/launch remains unverified.
+- Visual browser review was unavailable: the computer-use tool reported no connected
+  browser. DOM tests are not a substitute for reviewing the rendered window.
+
+The GitHub desktop job now includes locked frontend tests/build and native Cargo
+checking on Ubuntu with system prerequisites. It has not yet run on GitHub.
+No release bundle or publication was performed. Full UI-to-microphone acceptance,
+visible microphone-indicator cleanup, native focus behavior, reduced-motion visual
+review and a Wi-Fi-disabled run remain the checks in
+[desktop-development.md](desktop-development.md). The existing terminal microphone
+acceptance does not prove these new UI behaviors on the laptop.

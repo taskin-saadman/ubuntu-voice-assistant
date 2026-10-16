@@ -6,8 +6,9 @@ llama.cpp, faster-whisper, Piper, FastAPI and React/Tauri 2.
 The repository contains a tested controller foundation and a local health API.
 The recorded-audio Whisper → Qwen → Piper pipeline has also been tested separately
 on the target laptop, including a restart with Wi-Fi disabled. Capture, VAD and
-Whisper now connect through a local transcription diagnostic; Qwen, Piper and the
-push-to-talk interface are not yet connected to the new controller. See the
+Whisper now connect through a local transcription diagnostic and an authenticated
+React push-to-talk preview. Qwen and Piper are not yet connected to the new controller.
+The Tauri shell still needs native build and hardware acceptance checks. See the
 [verification results and limitations](docs/verification.md).
 
 ## Development with uv
@@ -31,8 +32,8 @@ uv run --locked pytest -W error
 dependencies; `uv.lock` records exact resolutions. uv creates `.venv` automatically.
 Use `uv add <package>` or `uv add --dev <package>` for reviewed dependency changes,
 and include both the manifest and lockfile in the change. Use `uv run` for
-backend commands. Node/npm and Cargo will continue to manage the frontend and
-Tauri dependencies when those components exist.
+backend commands. Node/npm and Cargo manage the frontend and Tauri dependencies;
+see the [desktop development guide](docs/desktop-development.md).
 
 ## Run the Phase 2 health server
 
@@ -73,7 +74,9 @@ Ctrl+C cancels and releases resources. This diagnostic displays the transcript i
 your terminal and writes no recordings or history files. See
 [Ubuntu audio setup](docs/setup-ubuntu.md) for device enumeration, local model
 requirements, silence/recovery checks and limitations. The health server remains
-read-only; authenticated controls and the React/Tauri interface are still pending.
+read-only. To try the authenticated hold-to-talk preview, follow the
+[desktop development guide](docs/desktop-development.md). It includes connection
+setup, native prerequisites and the remaining manual acceptance checks.
 
 ## GitHub Actions
 
@@ -88,8 +91,9 @@ GitHub with Actions enabled. Manual dispatch requires the workflow on the defaul
 branch. After its first successful run, `Repository checks` can be selected as a
 required check in a branch ruleset. These repository settings have not been changed.
 
-Desktop tests and build jobs will be added alongside that implementation. Hosted
-CI uses fake adapters and synthetic fixtures; real GPU, microphone, playback and
+The `Desktop checks` job installs locked npm dependencies, tests controls, builds
+the frontend and checks the native Tauri shell with Rust 1.98.1 and Ubuntu development
+libraries. Its first hosted run is pending. Hosted CI uses fake adapters and synthetic fixtures; real GPU, microphone, playback and
 offline acceptance checks remain target-laptop verification. Delivery automation is deferred until
 the first working milestone; this workflow does not publish releases.
 
