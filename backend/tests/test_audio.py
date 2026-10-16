@@ -127,6 +127,8 @@ def test_ipc_rejects_oversized_or_inconsistent_messages() -> None:
 
 
 class WorkerFactory:
+    fixture = "audio_worker_fixture.py"
+
     def __init__(self, mode: str = "normal") -> None:
         self.mode = mode
         self.processes: list[Process] = []
@@ -136,7 +138,7 @@ class WorkerFactory:
     async def launch(self) -> Process:
         process = await asyncio.create_subprocess_exec(
             sys.executable,
-            str(Path(__file__).with_name("audio_worker_fixture.py")),
+            str(Path(__file__).with_name(self.fixture)),
             self.mode,
             stdin=PIPE,
             stdout=PIPE,

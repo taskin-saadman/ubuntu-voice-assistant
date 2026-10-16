@@ -56,3 +56,24 @@ Sources: [sounddevice metadata](https://pypi.org/project/sounddevice/0.5.6/),
 [pycparser metadata](https://pypi.org/project/pycparser/3.11/),
 [sounddevice installation](https://python-sounddevice.readthedocs.io/en/latest/installation.html),
 [PortAudio license](https://www.portaudio.com/license.html).
+
+## Phase 3 VAD and transcription
+
+The existing faster-whisper 1.2.1 dependency provides Whisper and its bundled
+Silero VAD model; no new VAD package or model download was introduced. NumPy is
+now declared directly because the adapter converts PCM to the float32 arrays
+expected by these engines. Its existing locked resolution remains 2.5.4. Upstream
+metadata declares `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0`, including
+bundled components; distribution must retain applicable notices.
+
+The private speech worker sets Hugging Face offline/telemetry-disable flags before
+inference imports and disables ONNX Runtime telemetry. It requires a local model
+directory with `model.bin`, `config.json`, `tokenizer.json`, and vocabulary files.
+In particular, the tokenizer check prevents faster-whisper's missing-tokenizer
+fallback to `Tokenizer.from_pretrained`. There is no automatic download path in
+application startup. These configuration measures are not a network-traffic audit.
+
+Sources: [NumPy 2.5.4 metadata](https://pypi.org/project/numpy/2.5.4/),
+[faster-whisper usage and VAD](https://github.com/SYSTRAN/faster-whisper#usage),
+[pinned tokenizer loading](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/transcribe.py),
+[pinned bundled VAD](https://github.com/SYSTRAN/faster-whisper/blob/v1.2.1/faster_whisper/vad.py).
