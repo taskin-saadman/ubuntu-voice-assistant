@@ -57,7 +57,9 @@ class FakeEngines:
         await self.step("stt")
         return self.text
 
-    async def respond(self, messages: tuple[Message, ...]) -> str:
+    async def respond(
+        self, messages: tuple[Message, ...], on_delta: Callable[[str], None] | None = None
+    ) -> str:
         self.prompt = messages
         await self.step("llm")
         return self.answer
