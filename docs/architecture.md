@@ -234,3 +234,49 @@ client calls and render validated authoritative snapshots. The Rust shell provid
 a window only: no native command capabilities, engine logic or backend spawning.
 See [desktop-development.md](desktop-development.md) for protocol limits, pairing,
 privacy boundaries and manual acceptance.
+
+## Phase 4 conversation and streaming
+
+`ConversationComponents` adds a language-model adapter to the transcription
+components. The existing full `Components` adds TTS/playback afterward, preserving
+Phase 2's full-turn tests and the Phase 3 transcription-only diagnostic.
+`ConversationRuntime` now wires the desktop to `LlamaClient`; its HTTP pool closes
+with the runtime. llama.cpp remains a separately launched local process.
+
+The LLM contract accepts a synchronous, non-blocking delta callback. The controller
+keeps draft text separate from conversation history, ties callbacks to the active
+turn and ignores late callbacks after cancellation or turn replacement. Only a
+validated, complete answer enters history. Cancellation, error and completion all
+clear the draft. Native model work remains in llama.cpp; HTTP and stream processing
+are asynchronous in Python.
+
+Authenticated snapshots include the bounded draft alongside state, turn ID and
+history. Draft changes do not allocate journal events or advance the journal
+sequence; the existing snapshot sender observes changes and the frontend accepts
+ordered snapshots at the same sequence. New state/history events still advance
+that sequence. This avoids replaying hundreds of partial answers and lets snapshots
+remain authoritative after journal gaps. The UI escapes text, marks drafts as
+in-progress, follows new text while scrolled near the bottom, and keeps a Stop
+response control available during transcription/generation.
+
+`LlamaClient` uses a fixed IPv4-loopback host, no environment proxy settings, no
+redirect following, bounded responses and one active generation per client. It
+closes the streaming HTTP response on completion/error/cancellation. SSE framing
+handles fragmented UTF-8 and CRLF, rejects oversized events/bodies, and requires
+both a successful stop finish and `[DONE]`. Non-thinking template options are sent
+on every request. Structured tool/reasoning output and known special markers are
+rejected; possible marker prefixes are held until subsequent chunks disambiguate
+them, so split markers are not emitted to the UI.
+
+Context is measured with the server's `/apply-template` and `/tokenize`, using the
+same request options as generation. The adapter retains the system instruction and
+latest user request, drops oldest complete pairs to reserve output space, and
+rejects a latest request that still cannot fit. Orphan assistant messages and
+failed/cancelled user-only turns are not sent back to the model. Display history
+is unaffected by prompt pruning and remains bounded in memory.
+
+The speech-ready flag remains independent of LLM health. The desktop's `/ready`
+service now probes llama.cpp, but overall readiness remains false until the other
+full-pipeline probes are configured. Generation failure preserves the user's
+transcript, reports a safe error and supports reset/retry. No tool registry or
+model-generated action is connected in Phase 4.

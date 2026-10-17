@@ -481,3 +481,58 @@ not yet implemented.
 
 No application code changed in this acceptance update. `git diff --check` passed;
 automated tests were not repeated for documentation-only changes.
+
+## Phase 4: local Qwen conversation implementation
+
+Implemented on 2026-10-18 on `feat/phase-4-qwen-conversation`. Desktop turns now
+continue from transcription into a streamed Qwen answer. Piper playback remains
+Phase 5 work. The transcription-only CLI remains available.
+
+Local validation: **176 backend tests and 23 frontend tests passed**. Ruff lint/format,
+strict mypy across 42 Python files, TypeScript/frontend build, offline native Cargo
+check, Rust formatting, YAML lint and offline zizmor checks passed. The full backend
+suite ran with offline flags, asyncio debug and warnings treated as errors. Hosted
+CI and native UI acceptance have not run for this branch.
+
+Automated coverage adds fragmented Unicode/SSE parsing, comments and multiline
+frames, completion markers, output limits, malformed/unfinished responses, split
+reasoning/control markers, tool-call rejection, context fitting and pruning,
+malformed tokenizer/template replies, redirects, server failures, timeouts,
+cancellation/stream cleanup and retry. Controller/transport tests verify draft
+snapshots, finalized-only history, stale callback rejection, silence skipping Qwen,
+disconnect cleanup, error recovery and conversation-runtime cleanup. UI tests cover
+escaped in-progress text, completed replacement, Stop response, same-sequence draft
+updates and draft-size rejection.
+
+### Native checks with the downloaded engines
+
+A temporary server was launched using the existing pinned llama.cpp binary and
+Qwen3-4B Q4_K_M model, with 4096 context, one slot, the previously verified GPU-fit
+settings, non-thinking template configuration, offline mode and logs disabled.
+Only generated prompts/audio were used; no microphone, personal recording or
+speaker playback was accessed. Audio and conversation data stayed in memory.
+The documented `--reasoning off` startup flag was also tested with a successful
+native streaming request. Temporary verification servers were stopped afterward.
+
+| Observation | Result |
+| --- | --- |
+| Direct native streaming request | Completed; 28 text chunks, 159 answer characters |
+| First text callback / complete request in that one sample | 0.07 s / 0.56 s |
+| Native HTTP stream cancellation after first text | Cancelled; a subsequent request completed successfully |
+| Oversized latest input using the native tokenizer | Rejected before generation with context-limit error |
+| Generated 4.93-second utterance → real Silero/Whisper → Qwen → controller history | Correct transcript and relevant completed answer; 1.66 s warm processing |
+| Controller state sequence | listening → transcribing → thinking → idle |
+
+An earlier 2.90-second synthetic arithmetic utterance was misrecognized by Whisper.
+Qwen answered the incorrect transcript, so the semantic assertion failed even though
+the pipeline completed. This is a recognition-quality limitation, not a passing
+accuracy test. The longer utterance passed without changing the selected models or
+recognition settings. These isolated samples do not establish a latency distribution
+or recognition-accuracy rate. Processing timing excludes synthesis, model warmup,
+physical capture, UI rendering and playback. Offline flags and cached assets were
+used; Wi-Fi was not disabled and no network-traffic audit was performed.
+
+Native Phase 4 UI acceptance is pending: hold-to-answer rendering, follow-up context,
+Stop/Escape during generation, server-down/reset/retry and offline restart still need
+user checks in `desktop-development.md`. Prior Phase 3 UI acceptance does not verify
+these new behaviors. No release bundle or publication is included.

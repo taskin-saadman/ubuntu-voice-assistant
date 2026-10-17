@@ -1,8 +1,32 @@
-# Phase 3 desktop transcription preview
+# Desktop push-to-talk conversation
 
 The interface connects hold-to-talk → microphone capture → Silero → CPU/int8
-Whisper → visible transcript. Qwen responses, Piper playback and tools are not
-wired into this preview. The existing terminal diagnostic remains available.
+Whisper → visible transcript → streamed Qwen answer. Piper playback and tools are
+not wired into this preview. The existing terminal diagnostic remains transcription-only.
+
+## Start Qwen
+
+Use the previously verified llama.cpp build and Qwen3-4B Q4_K_M model. In a separate
+terminal, keep this server running while using the assistant:
+
+```bash
+~/.local/share/ubuntu-voice-assistant/tools/llama.cpp/build/bin/llama-server \
+  --model ~/.local/share/ubuntu-voice-assistant/models/qwen3-4b/Qwen3-4B-Q4_K_M.gguf \
+  --alias qwen3-4b --host 127.0.0.1 --port 8080 \
+  --ctx-size 4096 --parallel 1 --gpu-layers auto \
+  --fit on --fit-target 512 --batch-size 256 --ubatch-size 128 \
+  --jinja --reasoning off \
+  --offline --no-webui --log-disable
+```
+
+This is the same pinned model/runtime and GPU configuration verified earlier.
+The pinned runtime deprecates the old CLI `enable_thinking` template override;
+`--reasoning off` selects its supported equivalent. Each HTTP request also disables
+thinking through its template options.
+`--log-disable` prevents runtime logs from retaining prompt/output details.
+Check startup in another terminal with `curl --fail http://127.0.0.1:8080/health`.
+If port 8080 already hosts the correctly configured server, reuse that process.
+The Python backend does not start, stop, download or replace llama.cpp or its model.
 
 ## Start the backend
 
@@ -34,14 +58,16 @@ Open **http://127.0.0.1:1420**. The exact host/port matters for origin validatio
 **Connect locally**, then **Load speech model**. While the microphone is disabled,
 choose your current physical microphone input, then enable the microphone switch.
 Hold the talk button, wait for **Listening to you**, speak, and release.
-The transcript appears after **Turning speech into text**. Keyboard users can
-hold Space or Enter while the button has focus. Escape disables the microphone.
+The transcript appears after **Turning speech into text**. The assistant then shows
+**Thinking about your question** and an in-progress reply. A valid completed answer
+replaces the draft. Keyboard users can hold Space or Enter while the button has focus. Escape disables the microphone.
 
 The microphone is off by default and only records during a turn. Turning the
 switch off, switching away from the window, hiding the page, losing pointer capture,
 or closing/disconnecting the client cancels recording. Normal pointer/key release
 transcribes the captured audio. A quick release during startup is retained until
-the server acknowledges that turn. Recording is capped at 30 seconds.
+the server acknowledges that turn. Recording is capped at 30 seconds. **Stop response**,
+Escape, focus loss or microphone-off also cancel generation. Incomplete drafts are removed; completed messages remain.
 
 After cancellation during inference, the speech worker may need reloading. Disable
 the microphone and choose **Load speech model**; if an error is shown, use **Reset
@@ -145,9 +171,12 @@ recognition accuracy or native/offline operation.
 
 ## Transport and privacy boundaries
 
-Only the opt-in desktop launcher mounts `/session`. HTTP health remains read-only;
-`/ready` still reports the full pipeline as `not_configured` (503). Authenticated
-snapshots expose separate transcription-model readiness to this preview.
+Restart both the Python backend and frontend after updating: snapshots now include
+a bounded `draft` field. Only the opt-in desktop launcher mounts `/session`. HTTP health remains read-only;
+`/ready` reports the full pipeline as `not_ready` (503) while other probes remain
+`not_configured`; its `llm` entry now checks llama.cpp health. Authenticated snapshots
+expose separate transcription-model readiness. A ready speech model does not imply
+llama.cpp is available: a failed generation preserves the transcript and shows an error.
 
 The server requires an exact allowed Origin and a first authentication frame within
 three seconds. Tokens are not URL parameters, cookies, files or browser storage.
@@ -167,3 +196,41 @@ application logs; the connection key is intentionally printed once in the develo
 terminal. Origin checks protect the browser boundary, not a hostile local process
 with access to the key. The manual key is a development pairing mechanism; packaged
 launch/credential delivery remains future work.
+
+
+## Phase 4 conversation acceptance
+
+After starting Qwen, restart the Python backend, reconnect with its new key, and
+load the speech model. Keep the same local launch workaround if using VS Code Snap.
+
+1. Ask a short question. Confirm `listening → transcribing → thinking → idle`, a
+   visible transcript, streaming draft text and one completed assistant answer.
+2. Ask a follow-up referring to the previous answer. Confirm recent completed turns
+   provide context. No speech playback is expected in Phase 4.
+3. During a longer answer, use **Stop response** or Escape. The draft should vanish,
+   the microphone should be disabled, and re-enabling it should permit a fresh turn.
+4. Stop llama.cpp and ask a question. The transcript should remain, an error should
+   appear, and no assistant answer should be committed. Restart llama.cpp, choose
+   **Reset assistant**, and retry. No backend restart should be necessary.
+5. Repeat silence, client-disconnect and focus-loss checks with generation enabled.
+   Later repeat after a Wi-Fi-disabled restart with all assets already downloaded.
+
+The latest request is never silently cut to fit. The client asks llama.cpp to apply
+its chat template and tokenize the result, keeping at most 3680 prompt tokens with
+384 output tokens and a 32-token margin in the 4096-token context. Oldest complete
+user/assistant pairs are removed from the request as needed; the visible history
+still holds up to 20 messages. Failed/cancelled user-only turns are excluded from
+future prompt context. Very large histories are also bounded before tokenization.
+A latest request that cannot fit produces an explicit shorter-question error.
+
+Generation has a 55-second overall client deadline, a 15-second HTTP read deadline,
+and a separate 60-second controller deadline. Answers are capped at 384 tokens and
+8192 characters. A token-limit finish, missing completion marker, malformed event,
+reasoning field or recognized control markup causes failure and discards the draft.
+Use a shorter question/request if output is repeatedly truncated. The client does
+not automatically retry or continue partial answers. Text is rendered as plain text.
+
+Thinking is disabled in both the server command and each request. The client rejects
+structured reasoning/tool calls and known reasoning/control markers, including
+markers split across chunks. This is format validation, not a guarantee of factual
+accuracy or a general semantic classifier for model output. No tools are exposed.

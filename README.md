@@ -7,7 +7,9 @@ The repository contains a tested controller foundation and a local health API.
 The recorded-audio Whisper → Qwen → Piper pipeline has also been tested separately
 on the target laptop, including a restart with Wi-Fi disabled. Capture, VAD and
 Whisper now connect through a local transcription diagnostic and an authenticated
-React push-to-talk preview. Qwen and Piper are not yet connected to the new controller.
+React push-to-talk interface. Phase 4 connects streamed Qwen replies through llama.cpp;
+Piper playback remains Phase 5 work. Native speech-to-Qwen checks with generated
+audio pass; the updated desktop conversation flow awaits user acceptance.
 The Tauri shell builds and renders on the laptop. The user has accepted native
 transcription, silence handling, Escape/focus-loss cancellation and retry; broader
 hardware and offline acceptance checks remain. See the
@@ -61,7 +63,7 @@ controller's typed interfaces, event schemas, cancellation and error recovery.
 Tests exercise complete simulated turns with fake adapters and synthetic audio;
 they require no GPU, model downloads or microphone access.
 
-## Phase 3 audio development
+## Audio and conversation development
 
 Phase 3 adds isolated microphone capture, input-device selection, recording limits,
 16 kHz normalization, Silero silence filtering and local CPU/int8 Whisper. Run an
@@ -75,7 +77,9 @@ The model loads before capture opens. Speak when `State: listening` appears.
 Ctrl+C cancels and releases resources. This diagnostic displays the transcript in
 your terminal and writes no recordings or history files. See
 [Ubuntu audio setup](docs/setup-ubuntu.md) for device enumeration, local model
-requirements, silence/recovery checks and limitations. The health server remains
+requirements, silence/recovery checks and limitations. Start the Qwen server using
+the [Phase 4 setup](docs/desktop-development.md#start-qwen), then restart the desktop
+backend and UI to enable streamed answers. The health server remains
 read-only. To try the authenticated hold-to-talk preview, follow the
 [desktop development guide](docs/desktop-development.md). It includes connection
 setup, native prerequisites and the remaining manual acceptance checks.

@@ -117,3 +117,23 @@ Sources: [websockets](https://pypi.org/project/websockets/17.2/),
 [Testing Library license](https://github.com/testing-library/react-testing-library/blob/main/LICENSE),
 [Tauri licenses](https://github.com/tauri-apps/tauri),
 [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/).
+
+## Phase 4 local Qwen client
+
+HTTPX is promoted from the development group to runtime dependencies for asynchronous
+loopback HTTP and streamed responses. The constraint remains `>=0.28.1,<0.29`, the
+locked version remains 0.28.1, and its reviewed license remains BSD-3-Clause. This
+reuses the installed package; no OpenAI SDK, SSE package or tokenizer package is
+added. The existing llama.cpp server supplies its own model-specific chat template
+and tokenizer. Its pinned source commit is recorded in `verification.md`.
+
+The client only constructs `http://127.0.0.1:<port>` URLs, ignores proxy environment
+variables and never follows redirects. Its requests target health, template,
+tokenization and chat-completion endpoints. Models are still loaded from local
+files by the separately launched server; the application has no cloud fallback
+or download path. For normal use, launch llama.cpp with the documented offline and
+logging-disable flags. The client stores no audio or conversation files.
+
+Protocol decisions were checked against the installed pinned llama.cpp source and
+[server documentation at that revision](https://github.com/ggml-org/llama.cpp/blob/620d2225cc436ab0b001e3200e590e3b286ef9ab/tools/server/README.md).
+HTTPX behavior and licensing are described in the [upstream repository](https://github.com/encode/httpx/tree/0.28.1).
