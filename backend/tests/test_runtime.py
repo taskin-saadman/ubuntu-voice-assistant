@@ -50,3 +50,15 @@ async def test_prepare_warms_model_and_lists_devices_without_capture(
         assert not runtime.controller.busy
     finally:
         await runtime.close()
+
+
+async def test_conversation_runtime_wires_qwen_and_closes_client() -> None:
+    from voice_assistant.controller import ConversationComponents
+    from voice_assistant.runtime import ConversationRuntime
+
+    runtime = ConversationRuntime()
+    assert isinstance(runtime.controller.components, ConversationComponents)
+    assert runtime.controller.components.llm is runtime.llm
+    assert not runtime.controller.microphone_enabled and not runtime.ready
+    await runtime.close()
+    assert runtime.llm._client.is_closed

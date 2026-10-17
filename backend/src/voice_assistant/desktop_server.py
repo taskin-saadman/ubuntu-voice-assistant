@@ -1,4 +1,4 @@
-"""Start the opt-in authenticated transcription backend for desktop development."""
+"""Start the authenticated local conversation backend for desktop development."""
 
 import secrets
 import socket
@@ -6,7 +6,8 @@ import socket
 import uvicorn
 
 from voice_assistant.api import create_app
-from voice_assistant.runtime import TranscriptionRuntime
+from voice_assistant.readiness import ComponentName, ReadinessService
+from voice_assistant.runtime import ConversationRuntime
 from voice_assistant.transport import DesktopTransport
 
 
@@ -17,8 +18,11 @@ def main() -> None:
         listener.bind(("127.0.0.1", 8765))
         listener.listen(128)
         token = secrets.token_urlsafe(32)
-        runtime = TranscriptionRuntime()
-        app = create_app(desktop=DesktopTransport(runtime, token))
+        runtime = ConversationRuntime()
+        app = create_app(
+            desktop=DesktopTransport(runtime, token),
+            readiness=ReadinessService({ComponentName.LLM: runtime.llm.available}),
+        )
         config = uvicorn.Config(
             app,
             host="127.0.0.1",

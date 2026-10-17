@@ -73,6 +73,7 @@ class Snapshot(Schema):
     device: int | None
     devices: tuple[InputDevice, ...]
     messages: tuple[Message, ...] = Field(repr=False)
+    draft: str = Field(default="", max_length=8192, repr=False)
 
 
 class Packet(Schema):
@@ -103,6 +104,7 @@ class DesktopTransport:
             device=self.runtime.device,
             devices=self.runtime.devices,
             messages=c.components.history.messages(),
+            draft=c.draft,
         )
 
     async def serve(self, socket: WebSocket) -> None:

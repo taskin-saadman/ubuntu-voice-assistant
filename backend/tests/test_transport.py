@@ -209,3 +209,31 @@ def test_heartbeat_remains_responsive_while_model_loads() -> None:
                 assert command(socket, "ping")["error"] is None
             # Model loading has not blocked the independent receive/send loops.
             assert not runtime.ready
+
+
+def test_authenticated_streaming_draft_and_disconnect_cleanup() -> None:
+    from .test_conversation import StreamingFake, controller_for
+
+    fake = StreamingFake()
+    fake.gates["llm"] = asyncio.Event()
+    runtime = FakeRuntime()
+    runtime.controller = controller_for(fake)
+    with TestClient(
+        create_app(desktop=DesktopTransport(runtime, TOKEN)), base_url="http://127.0.0.1"
+    ) as client:
+        with client.websocket_connect("ws://127.0.0.1/session", headers=ORIGIN) as socket:
+            socket.send_json({"version": 1, "token": TOKEN})
+            assert receive(socket, "snapshot")["draft"] == ""
+            command(socket, "prepare")
+            command(socket, "microphone", enabled=True)
+            turn = command(socket, "start")["turn_id"]
+            command(socket, "release", turn_id=turn)
+            while True:
+                snapshot = receive(socket, "snapshot")
+                if snapshot["draft"]:
+                    break
+            assert snapshot["state"] == "thinking"
+            assert snapshot["draft"] == "Partial answer"
+            assert len(snapshot["messages"]) == 1
+        assert runtime.controller.draft == ""
+        assert not runtime.controller.busy and not runtime.controller.microphone_enabled
