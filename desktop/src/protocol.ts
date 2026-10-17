@@ -3,7 +3,7 @@ export type AssistantState = typeof states[number];
 export interface Snapshot {
   kind: "snapshot"; version: 1; sequence: number; state: AssistantState;
   busy: boolean; microphone_enabled: boolean; turn_id: string | null;
-  ready: boolean; device: number | null;
+  ready: boolean; device: number | null; draft: string;
   devices: { index: number; name: string; sample_rate: number }[];
   messages: { role: "user" | "assistant"; content: string }[];
 }
@@ -33,7 +33,7 @@ export function parsePacket(raw: string): Packet {
   if (p.kind === "snapshot" && p.version === 1 && Number.isInteger(p.sequence)
     && states.includes(p.state as AssistantState) && typeof p.busy === "boolean"
     && typeof p.microphone_enabled === "boolean" && typeof p.ready === "boolean"
-    && nullableText(p.turn_id, 36) && nullableIndex(p.device)
+    && nullableText(p.turn_id, 36) && nullableIndex(p.device) && text(p.draft, 8192)
     && Array.isArray(p.devices) && p.devices.length <= 128
     && p.devices.every(d => object(d) && Number.isInteger(d.index) && Number(d.index) >= 0
       && text(d.name, 256) && typeof d.sample_rate === "number")
