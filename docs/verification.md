@@ -536,3 +536,36 @@ Native Phase 4 UI acceptance is pending: hold-to-answer rendering, follow-up con
 Stop/Escape during generation, server-down/reset/retry and offline restart still need
 user checks in `desktop-development.md`. Prior Phase 3 UI acceptance does not verify
 these new behaviors. No release bundle or publication is included.
+
+### User acceptance of Phase 4 conversation
+
+On 2026-10-20, the user reported that all checks in the supplied six-part spoken
+test script passed:
+
+- A short question produced the expected state sequence, transcript, streamed
+  draft and completed answer.
+- A follow-up recalled information from an earlier completed turn.
+- Stop response and Escape discarded unfinished drafts and disabled the
+  microphone; re-enabling it allowed successful new turns.
+- Stopping llama.cpp produced a visible error while preserving the transcript.
+  Restarting llama.cpp and resetting the assistant allowed a successful retry
+  without restarting the Python backend.
+- Silence produced a no-speech notice without adding a transcript or answer.
+
+The supplied screenshot independently shows the server-unavailable error,
+retained user transcript, microphone-disabled state and Reset assistant control.
+It does not independently demonstrate the other reported checks. No screenshot
+or conversation content was copied into the repository.
+
+The user also supplied passing local output for all 176 backend tests, 23 frontend
+tests, Ruff lint/format, mypy, the TypeScript/Vite build, Rust formatting and Cargo
+check. Initial frontend/native commands failed because they were run from the
+repository root; rerunning from `desktop/` passed without code changes.
+
+This supersedes the pending status above for the tested Phase 4 conversation,
+cancellation and recovery behavior. Wi-Fi-disabled desktop restart, additional
+disconnect/focus-loss checks during generation and hosted CI remain unverified
+for this phase. Piper playback remains Phase 5 work.
+
+This acceptance update changes documentation only. `git diff --check` passed;
+application test suites were not repeated.

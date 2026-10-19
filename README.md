@@ -9,7 +9,8 @@ on the target laptop, including a restart with Wi-Fi disabled. Capture, VAD and
 Whisper now connect through a local transcription diagnostic and an authenticated
 React push-to-talk interface. Phase 4 connects streamed Qwen replies through llama.cpp;
 Piper playback remains Phase 5 work. Native speech-to-Qwen checks with generated
-audio pass; the updated desktop conversation flow awaits user acceptance.
+audio pass; the user has accepted desktop replies, follow-up context, Stop/Escape
+cancellation and server-down recovery.
 The Tauri shell builds and renders on the laptop. The user has accepted native
 transcription, silence handling, Escape/focus-loss cancellation and retry; broader
 hardware and offline acceptance checks remain. See the
