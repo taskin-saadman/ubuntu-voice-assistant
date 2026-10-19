@@ -117,6 +117,7 @@ class Controller:
         self._closed = False
         self._cleanup_failed = False
         self._draft = ""
+        self.preparing_speech = False
 
     @property
     def draft(self) -> str:
@@ -339,6 +340,7 @@ class Controller:
         self._draft = ""
         if not isinstance(c, Components):
             return
+        self.preparing_speech = True
         spoken = await self._perform(
             lambda: c.tts.synthesize(answer.strip()), d.synthesis, ErrorCode.TTS_UNAVAILABLE
         )
@@ -350,6 +352,7 @@ class Controller:
                 and not self._cancel.is_set()
                 and self.state == State.THINKING
             ):
+                self.preparing_speech = False
                 self._state(State.SPEAKING)
 
         await self._perform(
@@ -373,6 +376,7 @@ class Controller:
                 Failure(code=ErrorCode.INTERNAL_ERROR, message=_MESSAGES[ErrorCode.INTERNAL_ERROR])
             )
         finally:
+            self.preparing_speech = False
             self._draft = ""
             # Also invalidate a playback callback retained by a misbehaving adapter.
             self._cancel.set()
