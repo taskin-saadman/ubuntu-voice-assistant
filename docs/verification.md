@@ -569,3 +569,70 @@ for this phase. Piper playback remains Phase 5 work.
 
 This acceptance update changes documentation only. `git diff --check` passed;
 application test suites were not repeated.
+
+## Phase 5: Piper synthesis and selected-device playback
+
+Implemented on 2026-10-20 on `feat/phase-5-piper-playback`. The desktop now wires
+complete-answer CPU Piper synthesis and selected-device PortAudio playback after
+Qwen. The UI distinguishes Preparing speech from Speaking, offers Stop speaking,
+and preserves completed answers on synthesis/playback failure or cancellation.
+No dependencies, system configuration, downloaded assets or release workflow were
+changed. Phase 4's merge and passing CI were reported by the user before this work.
+
+Local checks passed: **224 backend tests and 29 frontend tests**, Ruff lint/format,
+strict mypy across 54 Python files, TypeScript/Vite production build, offline locked
+Cargo check and Rust formatting. The full Python suite ran with warnings treated
+as errors, asyncio debug and Hugging Face offline flags. Hosted Phase 5 CI has not
+run. Documentation-only edits were checked with `git diff --check`.
+
+New tests cover bounded synthesis/PCM schemas, CPU-only/thread-limited engine setup,
+missing voice/config, unsupported phonemizers, literal handling of Piper phoneme
+markup, resident worker reuse, timeouts, malformed/truncated worker output, delayed
+spawn cancellation, forced termination, cancellation-safe cleanup and retry. Playback
+tests cover complete-frame rendering, final silence padding, error-buffer silence,
+DAC-time start notification, drain completion, device failures and cancellation.
+Controller/runtime/transport/UI coverage verifies output selection guards, preserved
+answers, preparation/speaking feedback, Stop, disconnect cleanup and retry.
+
+### Native checks
+
+Only synthetic input/text was used; the microphone was not opened. Generated PCM
+and conversations stayed in memory. Existing downloaded models and the default
+system output were used; no output recordings or screenshots were saved.
+
+| Check | Observed result |
+| --- | --- |
+| Piper cold synthesis of a two-sentence test | 4.73 s mono audio at 22050 Hz; 1.68 s synthesis including worker/model startup |
+| Same request with resident Piper | 4.79 s audio; 0.19 s synthesis |
+| Output-device enumeration | 15 compatible outputs returned without opening playback |
+| Short native default-device playback | 2.11 s audio; start notification after 1.19 s, completion after 3.06 s from adapter call |
+| Cancel during native playback | Worker terminated/reaped; measured cancellation rounded to 0.00 s in this sample |
+| Playback after cancellation | Completed successfully |
+| Generated 5.24 s input → Silero/Whisper → Qwen → Piper → native output | Completed in 9.16 s, including output playback |
+| Full-controller states | listening → transcribing → thinking → speaking → idle |
+| Full-controller history and cleanup | User and completed assistant messages retained; output worker reaped |
+
+The full-controller measurement excludes synthetic input generation and engine
+warmup; it substitutes generated audio for physical capture and bypasses the UI.
+A temporary Qwen server used the existing pinned model/runtime, GPU-fit settings,
+4096 context and documented non-thinking/offline flags, then was stopped. All test
+workers were closed. These are individual samples, not latency percentiles, acoustic
+measurements or a recognition/answer-quality benchmark. PortAudio completion does
+not independently establish that the user heard clear speech. Wi-Fi was not disabled
+and no network-traffic audit was performed.
+
+The first native synthesis attempt exposed the local LJSpeech config's `en` eSpeak
+identifier. The initial implementation only allowed `en-us`; the adapter now accepts
+both English identifiers, with a regression test for each. The existing model and
+configuration were unchanged. Two new WebSocket tests initially used the test
+client's default host and were rejected by the existing host restriction; their
+URLs were corrected to loopback. Neither issue remains in the passing checks.
+
+### Remaining acceptance
+
+Follow the [Phase 5 checklist](desktop-development.md#phase-5-speech-and-playback-acceptance)
+for audible end-to-end desktop turns, last-word completion, repeated turns,
+Stop/Escape/focus-loss/disconnect behavior, microphone indicator observations,
+selected-device routing/removal and recovery, and a Wi-Fi-disabled restart. The
+first complete microphone-to-speaker milestone is awaiting that user acceptance.
+No native UI visual inspection, distribution approval, package or release is claimed.

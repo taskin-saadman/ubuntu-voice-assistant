@@ -1,8 +1,8 @@
 # Desktop push-to-talk conversation
 
 The interface connects hold-to-talk → microphone capture → Silero → CPU/int8
-Whisper → visible transcript → streamed Qwen answer. Piper playback and tools are
-not wired into this preview. The existing terminal diagnostic remains transcription-only.
+Whisper → visible transcript → streamed Qwen answer → CPU Piper → speaker playback.
+Tools are not wired into this preview. The existing terminal diagnostic remains transcription-only.
 
 ## Start Qwen
 
@@ -56,18 +56,21 @@ npm run dev
 Open **http://127.0.0.1:1420**. The exact host/port matters for origin validation;
 `localhost:1420` is not an accepted browser origin. Paste the backend key and choose
 **Connect locally**, then **Load speech model**. While the microphone is disabled,
-choose your current physical microphone input, then enable the microphone switch.
+choose your current physical microphone input and speaker output, then enable the
+microphone switch.
 Hold the talk button, wait for **Listening to you**, speak, and release.
 The transcript appears after **Turning speech into text**. The assistant then shows
 **Thinking about your question** and an in-progress reply. A valid completed answer
-replaces the draft. Keyboard users can hold Space or Enter while the button has focus. Escape disables the microphone.
+replaces the draft. The interface then shows **Preparing speech**, followed by
+**Speaking to you** during playback. Keyboard users can hold Space or Enter while the button has focus. Escape disables the microphone.
 
 The microphone is off by default and only records during a turn. Turning the
 switch off, switching away from the window, hiding the page, losing pointer capture,
 or closing/disconnecting the client cancels recording. Normal pointer/key release
 transcribes the captured audio. A quick release during startup is retained until
 the server acknowledges that turn. Recording is capped at 30 seconds. **Stop response**,
-Escape, focus loss or microphone-off also cancel generation. Incomplete drafts are removed; completed messages remain.
+Escape, focus loss or microphone-off also cancel generation, synthesis and playback.
+During playback, **Stop speaking** stops the output and disables the microphone. Incomplete drafts are removed; completed messages remain.
 
 After cancellation during inference, the speech worker may need reloading. Disable
 the microphone and choose **Load speech model**; if an error is shown, use **Reset
@@ -142,7 +145,7 @@ uv run --offline --locked ruff check backend
 uv run --offline --locked ruff format --check backend
 uv run --offline --locked mypy
 
-# desktop/
+cd desktop
 npm test
 npm run build
 cargo +1.98.1 fmt --manifest-path src-tauri/Cargo.toml -- --check
@@ -172,7 +175,7 @@ recognition accuracy or native/offline operation.
 ## Transport and privacy boundaries
 
 Restart both the Python backend and frontend after updating: snapshots now include
-a bounded `draft` field. Only the opt-in desktop launcher mounts `/session`. HTTP health remains read-only;
+bounded draft and speech-preparation fields plus output-device selection. Only the opt-in desktop launcher mounts `/session`. HTTP health remains read-only;
 `/ready` reports the full pipeline as `not_ready` (503) while other probes remain
 `not_configured`; its `llm` entry now checks llama.cpp health. Authenticated snapshots
 expose separate transcription-model readiness. A ready speech model does not imply
@@ -199,6 +202,9 @@ launch/credential delivery remains future work.
 
 
 ## Phase 4 conversation acceptance
+
+These checks were accepted before Phase 5. With Phase 5 enabled, completed answers
+also play aloud; use the additional playback checks below.
 
 After starting Qwen, restart the Python backend, reconnect with its new key, and
 load the speech model. Keep the same local launch workaround if using VS Code Snap.
@@ -234,3 +240,66 @@ Thinking is disabled in both the server command and each request. The client rej
 structured reasoning/tool calls and known reasoning/control markers, including
 markers split across chunks. This is format validation, not a guarantee of factual
 accuracy or a general semantic classifier for model output. No tools are exposed.
+
+
+## Phase 5 speech and playback acceptance
+
+Restart the Python backend and desktop after updating, using the existing Qwen
+server command and native GTK/WebKit workaround above. No new dependencies or
+system packages are required. Keep these already-downloaded files together:
+
+```text
+~/.local/share/ubuntu-voice-assistant/models/piper/en_US-ljspeech-medium.onnx
+~/.local/share/ubuntu-voice-assistant/models/piper/en_US-ljspeech-medium.onnx.json
+```
+
+Piper loads lazily on the first completed answer and stays resident on CPU. **Load
+speech model** still loads Whisper; it does not test the Piper files or speaker.
+Missing/invalid Piper files produce a synthesis error after the answer is displayed,
+without a download attempt. Restarting the backend reloads a changed voice file.
+
+With the microphone disabled, use **Refresh devices** and choose **Speaker output**.
+The default follows the system output at playback time. Device lists are session
+snapshots: refresh after connecting/disconnecting hardware. Outputs must support
+mono or stereo int16 audio at a default rate between 8 and 48 kHz. Piper's mono audio
+is resampled to that rate; stereo outputs receive it in both channels. Device choices
+are held in memory, so reselect them after restarting. The app does not change system
+volume or mute settings.
+
+1. **Complete answer:** Ask “In two short sentences, explain what a local voice
+   assistant does.” Confirm the transcript and complete answer appear, then hear
+   the entire answer once. Expect listening → transcribing → thinking (including
+   Preparing speech) → speaking → idle. The talk button stays unavailable until
+   the turn completes. Check that the final word is not cut off.
+2. **Repeated turns:** Ask three short follow-ups. Each should play once, with no
+   overlap, delayed replay or missing last word.
+3. **Stop:** Ask for five short benefits of local processing. During playback,
+   select **Stop speaking**. Audio should stop promptly, the completed answer should
+   remain visible, and the microphone should be disabled. Re-enable it and ask a
+   short question to verify recovery. If possible, also stop during Preparing speech;
+   the next answer should reload Piper automatically.
+4. **Other cancellation paths:** Repeat during playback using Escape, switching
+   windows, microphone-off and Disconnect. No old answer should resume after
+   reconnecting. Confirm Ubuntu's microphone indicator is off during speech output.
+5. **Output selection/failure:** With the microphone off, select a connected headset
+   or another known output and confirm speech routes there. If available, unplug a
+   selected removable output before a turn. Expect a visible playback error with
+   the completed answer retained. Reset, refresh/reselect an available output, and
+   retry. System sound servers may reroute a removed device rather than report an
+   error; record the observed behavior.
+6. **Offline restart:** With models/dependencies already cached, disable Wi-Fi,
+   restart Qwen/backend/desktop and repeat a full spoken turn. Do not claim this
+   check based solely on package offline flags.
+
+Automated tests cover missing/corrupt voice responses and native-worker failure;
+there is no need to move or delete your model files for manual testing. Record
+results without saving private audio or conversation text in Git.
+
+Only finalized, validated answers are synthesized. A synthesis/playback error keeps
+the answer visible and provides Reset assistant. A cancelled Piper request kills its
+worker; the next request loads it again. Speech is bounded to 90 seconds, with a
+25-second synthesis deadline. Playback startup is limited to 5 seconds, with bounded
+completion and cleanup waits. Native underflow is reported as an error rather than
+silently accepting dropped audio. Speaking follows PortAudio's scheduled first-buffer
+DAC time and finishes after its drain callback; exact acoustic timing still needs
+human verification. No sentence streaming, barge-in or automatic audio replay is added.

@@ -280,3 +280,46 @@ service now probes llama.cpp, but overall readiness remains false until the othe
 full-pipeline probes are configured. Generation failure preserves the user's
 transcript, reports a safe error and supports reset/retry. No tool registry or
 model-generated action is connected in Phase 4.
+
+
+## Phase 5 synthesis and playback
+
+`VoiceRuntime` extends the conversation runtime with `PiperSynthesizer` and
+`AudioPlayback`, wiring the existing full `Components` contract into the desktop.
+The transcription diagnostic and conversation-only runtime remain available. The
+controller stores a finalized answer before synthesis; failures or cancellation
+in either audio stage preserve it. A `preparing_speech` snapshot flag distinguishes
+synthesis/output startup from generation without adding another state. It clears
+on the playback-start callback and on every terminal path.
+
+Piper runs lazily in a resident private process with two ONNX CPU inference threads,
+one inter-op thread, telemetry disabled and no CUDA provider. The configured local
+ONNX and JSON files must exist. The supported English eSpeak configuration avoids
+alternative phonemizers with resource-download paths, and optional Arabic resource
+loading is disabled. Text is bounded and Piper's explicit phoneme delimiters are
+removed before synthesis. PCM returns through bounded binary pipes and is limited
+to 90 seconds; no audio or conversation files are written.
+
+Playback uses a separate short-lived process for each turn. PyAV resamples to the
+selected output's default rate and mono samples are duplicated for stereo. The
+PortAudio callback fills every buffer, pads the final block with silence, and
+requests a drain after the last samples. The worker reports start at the first
+buffer's scheduled DAC time, then reports completion after the finished callback.
+Errors abort/close output; parent disconnection is checked during playback. The
+async adapter also bounds startup and completion, and kills/reaps blocked workers.
+This reflects the audio driver's timing, not a measurement of sound at the listener.
+
+`LocalWorker` shares process ownership/cleanup between the new adapters. Startup
+is shielded so cancellation cannot abandon a just-created process. Generation
+checks prevent a delayed spawn from receiving work after stop. Cleanup is shared,
+shielded from caller cancellation and escalates termination to kill; ownership is
+not released until the process is reaped. The existing controller quarantines
+unfinished cleanup. Piper cancellation resets its worker for lazy retry; runtime
+shutdown closes all resident engines.
+
+Authenticated snapshots include output choices and selected output index. A typed
+`output` command accepts only a listed index or system default, and runtime guards
+require microphone-off and no active turn. The UI exposes Preparing speech,
+Speaking to you and Stop speaking. Escape, blur, microphone-off and disconnect use
+the same cancellation path; completed messages remain visible. Device selection
+is session-only. No output stream opens during startup or device enumeration.
