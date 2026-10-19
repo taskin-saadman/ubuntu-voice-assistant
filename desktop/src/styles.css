@@ -22,7 +22,7 @@ h1 span { color: #a3b1c9; }
 .orb-halo { position: absolute; width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, #4b67cb33, transparent 70%); }
 .orb-ring { position: absolute; width: 196px; height: 196px; border: 1px solid #8baff022; border-radius: 50%; transform: rotate(-25deg) scaleY(.72); }
 .listening .orb { animation: breathe 1.5s ease-in-out infinite; box-shadow: 0 0 60px #57d2ed77, inset 2px 3px 18px #b5f6ff8a; }
-.transcribing .orb-ring { border-top-color: #9e9fff; animation: rotate 2s linear infinite; }
+.transcribing .orb-ring, .thinking .orb-ring { border-top-color: #9e9fff; animation: rotate 2s linear infinite; }
 .error .orb { filter: hue-rotate(95deg); }
 .state { font-weight: 500; font-size: 18px; margin: 0 0 6px; }
 .hint { color: #a8b8ce; font-size: 13px; margin: 0 0 24px; }

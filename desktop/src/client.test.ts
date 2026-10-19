@@ -4,7 +4,7 @@ import { parsePacket, type Snapshot } from "./protocol";
 
 export const snapshot: Snapshot = {
   kind: "snapshot", version: 1, sequence: 0, state: "idle", busy: false,
-  microphone_enabled: true, turn_id: null, ready: true, device: null, devices: [], messages: [],
+  microphone_enabled: true, turn_id: null, ready: true, device: null, draft: "", devices: [], messages: [],
 };
 class FakeSocket {
   static OPEN = 1;
@@ -78,4 +78,16 @@ test.each([null, { ...snapshot, version: 2 }, { ...snapshot, microphone_enabled:
 test("microphone off prevents starting a turn", async () => {
   const socket = connect(); socket.packet({ ...snapshot, microphone_enabled: false }); await client.press();
   expect(socket.sent.length).toBe(1);
+});
+test("draft snapshots can update at the same event sequence and clear on cancellation", () => {
+  const socket = connect();
+  socket.packet({ ...snapshot, sequence: 5, state: "thinking", busy: true, draft: "First" });
+  socket.packet({ ...snapshot, sequence: 5, state: "thinking", busy: true, draft: "First answer" });
+  expect(client.getSnapshot().snapshot?.draft).toBe("First answer");
+  socket.packet({ ...snapshot, sequence: 6, draft: "", microphone_enabled: false });
+  expect(client.getSnapshot().snapshot?.draft).toBe("");
+});
+test("oversized drafts fail closed", () => {
+  const socket = connect(); socket.packet({ ...snapshot, draft: "x".repeat(8193) });
+  expect(client.getSnapshot().snapshot).toBeNull();
 });

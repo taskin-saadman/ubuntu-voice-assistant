@@ -59,7 +59,17 @@ class Transcriber(Protocol):
 
 
 class LanguageModel(Protocol):
-    async def respond(self, messages: tuple[Message, ...]) -> str: ...
+    async def respond(
+        self, messages: tuple[Message, ...], on_delta: Callable[[str], None] | None = None
+    ) -> str: ...
+
+
+class InvalidModelResponse(RuntimeError):
+    """The model response is incomplete, malformed or contains control content."""
+
+
+class ContextLimitExceeded(RuntimeError):
+    """The latest user message cannot fit with the system instruction and output budget."""
 
 
 class Synthesizer(Protocol):

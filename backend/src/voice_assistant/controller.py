@@ -11,7 +11,9 @@ from pydantic import Field
 
 from voice_assistant.contracts import (
     Capture,
+    ContextLimitExceeded,
     ConversationStore,
+    InvalidModelResponse,
     LanguageModel,
     Message,
     Playback,
@@ -49,8 +51,12 @@ class TranscriptionComponents:
 
 
 @dataclass(frozen=True)
-class Components(TranscriptionComponents):
+class ConversationComponents(TranscriptionComponents):
     llm: LanguageModel
+
+
+@dataclass(frozen=True)
+class Components(ConversationComponents):
     tts: Synthesizer
     playback: Playback
 
@@ -78,7 +84,8 @@ _MESSAGES = {
     ErrorCode.LLM_UNAVAILABLE: "The language model is unavailable. Check llama.cpp.",
     ErrorCode.TTS_UNAVAILABLE: "Speech synthesis is unavailable. Check Piper and the voice.",
     ErrorCode.PLAYBACK_FAILED: "Audio playback failed. Check the selected output device.",
-    ErrorCode.INVALID_RESPONSE: "The language model returned an invalid or empty answer.",
+    ErrorCode.INVALID_RESPONSE: "Incomplete or invalid model response. Try a shorter question.",
+    ErrorCode.CONTEXT_TOO_LONG: "The request exceeds the model context. Try a shorter question.",
     ErrorCode.DEADLINE_EXCEEDED: "This step took too long. Try again when it has stopped.",
     ErrorCode.CLEANUP_FAILED: "Audio resources could not be released. Restart the backend.",
     ErrorCode.INTERNAL_ERROR: "The turn failed. Reset the assistant and try again.",
@@ -109,6 +116,11 @@ class Controller:
         self._released = asyncio.Event()
         self._closed = False
         self._cleanup_failed = False
+        self._draft = ""
+
+    @property
+    def draft(self) -> str:
+        return self._draft
 
     @property
     def state(self) -> State:
@@ -258,6 +270,16 @@ class Controller:
                 raise _StageFailed(Failure(code=failure_code, message=_MESSAGES[failure_code]))
             try:
                 return cast(T, task.result())
+            except ContextLimitExceeded:
+                error_code = ErrorCode.CONTEXT_TOO_LONG
+                raise _StageFailed(
+                    Failure(code=error_code, message=_MESSAGES[error_code])
+                ) from None
+            except InvalidModelResponse:
+                error_code = ErrorCode.INVALID_RESPONSE
+                raise _StageFailed(
+                    Failure(code=error_code, message=_MESSAGES[error_code])
+                ) from None
             except asyncio.CancelledError:
                 raise _StageFailed(Failure(code=code, message=_MESSAGES[code])) from None
             except Exception:
@@ -290,11 +312,22 @@ class Controller:
         if not text.strip():
             raise _NoSpeech
         self._message(Message(role="user", content=text.strip()))
-        if not isinstance(c, Components):
+        if not isinstance(c, ConversationComponents):
             return
         self._state(State.THINKING)
+        turn_id = self._turn_id
+
+        def on_delta(delta: str) -> None:
+            if turn_id != self._turn_id or self._cancel.is_set() or self.state != State.THINKING:
+                return
+            if len(self._draft) + len(delta) > 8192:
+                raise InvalidModelResponse()
+            self._draft += delta
+
         answer = await self._perform(
-            lambda: c.llm.respond(c.history.messages()), d.generation, ErrorCode.LLM_UNAVAILABLE
+            lambda: c.llm.respond(c.history.messages(), on_delta),
+            d.generation,
+            ErrorCode.LLM_UNAVAILABLE,
         )
         if not answer.strip() or len(answer) > 8192 or "<think>" in answer or "</think>" in answer:
             raise _StageFailed(
@@ -303,6 +336,9 @@ class Controller:
                 )
             )
         self._message(Message(role="assistant", content=answer.strip()))
+        self._draft = ""
+        if not isinstance(c, Components):
+            return
         spoken = await self._perform(
             lambda: c.tts.synthesize(answer.strip()), d.synthesis, ErrorCode.TTS_UNAVAILABLE
         )
@@ -337,6 +373,7 @@ class Controller:
                 Failure(code=ErrorCode.INTERNAL_ERROR, message=_MESSAGES[ErrorCode.INTERNAL_ERROR])
             )
         finally:
+            self._draft = ""
             # Also invalidate a playback callback retained by a misbehaving adapter.
             self._cancel.set()
             cleanup = [self.components.capture.abort]

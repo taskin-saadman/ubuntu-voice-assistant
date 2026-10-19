@@ -6,7 +6,7 @@ import type { View, VoiceClient } from "./client";
 function fixture() {
   let view: View = { connection: "connected", error: "", note: "", preparing: false,
     snapshot: { kind: "snapshot", version: 1, sequence: 0, state: "idle", busy: false,
-      microphone_enabled: true, turn_id: null, ready: true, device: null, devices: [], messages: [] } };
+      microphone_enabled: true, turn_id: null, ready: true, device: null, draft: "", devices: [], messages: [] } };
   let notify = () => {};
   const client = { getSnapshot: () => view, subscribe: (fn: () => void) => { notify = fn; return () => {}; },
     press: vi.fn(), release: vi.fn(), suspend: vi.fn(), disconnect: vi.fn(), prepare: vi.fn(),
@@ -46,4 +46,24 @@ test("pointer hold releases normally and lost capture cancels", () => {
   fireEvent.pointerUp(button); expect(client.release).toHaveBeenCalledTimes(1);
   fireEvent(button, new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
   fireEvent.lostPointerCapture(button); expect(client.suspend).toHaveBeenCalledTimes(1);
+});
+test("streams escaped draft text and replaces it with the completed answer", () => {
+  const { client, change } = fixture();
+  const initial = client.getSnapshot().snapshot!;
+  change({ snapshot: { ...initial, state: "thinking", busy: true, draft: "<img src=x onerror=alert(1)>" } });
+  expect(screen.getByLabelText("Reply in progress").textContent).toContain("<img src=x");
+  expect(document.querySelector(".messages img")).toBeNull();
+  expect(screen.getByText("Thinking about your question")).toBeTruthy();
+  change({ snapshot: { ...initial, draft: "", messages: [{ role: "assistant", content: "Final answer" }] } });
+  expect(screen.queryByLabelText("Reply in progress")).toBeNull();
+  expect(screen.getByText("Final answer")).toBeTruthy();
+});
+test("stop response disables microphone and cancellation removes the draft", () => {
+  const { client, change } = fixture();
+  const initial = client.getSnapshot().snapshot!;
+  change({ snapshot: { ...initial, state: "thinking", busy: true, draft: "Partial answer" } });
+  fireEvent.click(screen.getByRole("button", { name: "Stop response" }));
+  expect(client.suspend).toHaveBeenCalledOnce();
+  change({ snapshot: { ...initial, draft: "", microphone_enabled: false } });
+  expect(screen.queryByText("Partial answer")).toBeNull();
 });

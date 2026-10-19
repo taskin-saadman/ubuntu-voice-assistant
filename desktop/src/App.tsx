@@ -6,10 +6,16 @@ export function App({ client }: { client: VoiceClient }) {
   const [key, setKey] = useState("");
   const [held, setHeld] = useState(false);
   const heldRef = useRef(false);
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const followMessages = useRef(true);
   const snapshot = view.snapshot;
   const connected = view.connection === "connected";
   const enabled = snapshot?.microphone_enabled ?? false;
   const state = snapshot?.state ?? "idle";
+  useEffect(() => {
+    const element = messagesRef.current;
+    if (element && followMessages.current) element.scrollTop = element.scrollHeight;
+  }, [snapshot?.messages.length, snapshot?.draft]);
   useEffect(() => {
     if (!connected || !enabled || state === "error" || state === "transcribing") {
       heldRef.current = false; setHeld(false);
@@ -36,7 +42,8 @@ export function App({ client }: { client: VoiceClient }) {
   const label = !connected ? "Connect to begin" : view.preparing ? "Loading speech model"
     : !snapshot?.ready ? "Speech model not loaded" : !enabled ? "Microphone disabled"
     : state === "idle" ? "Ready when you are" : state === "listening" ? "Listening to you"
-    : state === "transcribing" ? "Turning speech into text" : state === "error" ? "Let’s try again" : state;
+    : state === "transcribing" ? "Turning speech into text" : state === "thinking" ? "Thinking about your question"
+    : state === "error" ? "Let’s try again" : state;
 
   return <main className="app">
     <header><div className="brand"><span className="brand-dot" />LOCAL VOICE</div>
@@ -63,6 +70,8 @@ export function App({ client }: { client: VoiceClient }) {
           <span aria-hidden="true">◉</span> {held ? "Release to transcribe" : "Hold to talk"}
         </button>
         <span className="keyboard-hint">Hold Space or Enter when focused · Esc turns the microphone off</span>
+        {connected && snapshot?.busy && (state === "thinking" || state === "transcribing") &&
+          <button className="quiet" onClick={cancel}>Stop response</button>}
         <button className={`mic-toggle ${enabled ? "enabled" : ""}`} role="switch" aria-checked={enabled}
           disabled={!connected || (!enabled && (!snapshot?.ready || view.preparing || snapshot.busy))}
           onClick={() => { if (enabled) cancel(); else void client.microphone(true); }}>
@@ -95,12 +104,19 @@ export function App({ client }: { client: VoiceClient }) {
         </section>
         <section className="conversation glass" aria-label="Conversation">
           <div className="section-title"><h2>Conversation</h2><span className="muted">This session only</span></div>
-          <div className="messages" aria-live="polite" aria-relevant="additions text">
+          <div className="messages" ref={messagesRef} aria-live="polite" aria-relevant="additions text"
+            onScroll={event => {
+              const el = event.currentTarget;
+              followMessages.current = el.scrollHeight - el.clientHeight - el.scrollTop < 48;
+            }}>
             {!snapshot?.messages.length ? <div className="empty"><span aria-hidden="true">〰</span><h3>Start with your voice</h3><p>Your words will appear here.<br />Speech recognition runs locally.</p></div>
               : snapshot.messages.map((message, index) => <article className="message" key={index}>
                 <span className="speaker">{message.role === "user" ? "YOU" : "ASSISTANT"}</span><p>{message.content}</p></article>)}
+            {state === "thinking" && snapshot?.draft && <article className="message" aria-label="Reply in progress" aria-live="off">
+              <span className="speaker">ASSISTANT · WRITING</span><p>{snapshot.draft}</p>
+            </article>}
           </div>
-          <p className="small milestone">Transcription preview · Replies and speech playback come next.</p>
+          <p className="small milestone">Local Qwen conversation · Speech playback comes next.</p>
         </section>
       </aside>
     </section>

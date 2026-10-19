@@ -18,6 +18,7 @@ class ErrorCode(StrEnum):
     TTS_UNAVAILABLE = "tts_unavailable"
     PLAYBACK_FAILED = "playback_failed"
     INVALID_RESPONSE = "invalid_response"
+    CONTEXT_TOO_LONG = "context_too_long"
     DEADLINE_EXCEEDED = "deadline_exceeded"
     CLEANUP_FAILED = "cleanup_failed"
     INTERNAL_ERROR = "internal_error"

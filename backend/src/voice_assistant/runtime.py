@@ -1,24 +1,38 @@
-"""Own the transcription components used by the authenticated desktop session."""
+"""Own local engines and controller lifetimes for desktop sessions."""
 
 from voice_assistant.audio.capture import MicrophoneCapture, input_devices
 from voice_assistant.audio.models import CaptureSettings, InputDevice
-from voice_assistant.controller import Controller, ControllerRejected, TranscriptionComponents
+from voice_assistant.contracts import LanguageModel
+from voice_assistant.controller import (
+    Controller,
+    ControllerRejected,
+    ConversationComponents,
+    TranscriptionComponents,
+)
+from voice_assistant.llm.client import LlamaClient
 from voice_assistant.speech.adapters import SileroVAD, SpeechWorker, WhisperTranscriber
 from voice_assistant.storage import MemoryConversation
 
 
 class TranscriptionRuntime:
-    def __init__(self) -> None:
+    def __init__(self, llm: LanguageModel | None = None) -> None:
         self.capture = MicrophoneCapture()
         self.speech = SpeechWorker()
-        self.controller = Controller(
-            TranscriptionComponents(
-                capture=self.capture,
-                vad=SileroVAD(self.speech),
-                stt=WhisperTranscriber(self.speech),
-                history=MemoryConversation(),
-            )
+        components = TranscriptionComponents(
+            capture=self.capture,
+            vad=SileroVAD(self.speech),
+            stt=WhisperTranscriber(self.speech),
+            history=MemoryConversation(),
         )
+        if llm is not None:
+            components = ConversationComponents(
+                capture=components.capture,
+                vad=components.vad,
+                stt=components.stt,
+                history=components.history,
+                llm=llm,
+            )
+        self.controller = Controller(components)
         self.devices: tuple[InputDevice, ...] = ()
 
     @property
@@ -54,3 +68,15 @@ class TranscriptionRuntime:
             await self.controller.close()
         finally:
             await self.speech.close()
+
+
+class ConversationRuntime(TranscriptionRuntime):
+    def __init__(self) -> None:
+        self.llm = LlamaClient()
+        super().__init__(llm=self.llm)
+
+    async def close(self) -> None:
+        try:
+            await super().close()
+        finally:
+            await self.llm.close()

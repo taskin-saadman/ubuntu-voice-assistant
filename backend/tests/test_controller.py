@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Callable
 from uuid import uuid4
 
 import pytest
@@ -199,7 +200,9 @@ async def test_invalid_answers_are_not_spoken(answer: str) -> None:
 
 async def test_late_response_after_timeout_is_ignored_and_quarantined() -> None:
     class StubbornModel(FakeEngines):
-        async def respond(self, messages: tuple[Message, ...]) -> str:
+        async def respond(
+            self, messages: tuple[Message, ...], on_delta: Callable[[str], None] | None = None
+        ) -> str:
             await self.step("llm")
             while not gate.is_set():
                 try:
