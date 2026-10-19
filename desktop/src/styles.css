@@ -65,3 +65,5 @@ footer { color: #96a6bc; font-size: 10px; margin-top: 22px; }
 @keyframes rotate { to { transform: rotate(335deg) scaleY(.72); } }
 @media (max-width: 800px) { .app { padding: 24px 18px; } .workspace { grid-template-columns: 1fr; } .orb-stage { height: 220px; } footer { flex-wrap: wrap; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+.speaking .orb { animation: breathe 1.2s ease-in-out infinite alternate; }

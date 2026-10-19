@@ -6,11 +6,11 @@ import type { View, VoiceClient } from "./client";
 function fixture() {
   let view: View = { connection: "connected", error: "", note: "", preparing: false,
     snapshot: { kind: "snapshot", version: 1, sequence: 0, state: "idle", busy: false,
-      microphone_enabled: true, turn_id: null, ready: true, device: null, draft: "", devices: [], messages: [] } };
+      microphone_enabled: true, turn_id: null, ready: true, device: null, output_device: null, outputs: [], preparing_speech: false, draft: "", devices: [], messages: [] } };
   let notify = () => {};
   const client = { getSnapshot: () => view, subscribe: (fn: () => void) => { notify = fn; return () => {}; },
     press: vi.fn(), release: vi.fn(), suspend: vi.fn(), disconnect: vi.fn(), prepare: vi.fn(),
-    microphone: vi.fn(), selectDevice: vi.fn(), reset: vi.fn(), connect: vi.fn() };
+    microphone: vi.fn(), selectDevice: vi.fn(), selectOutput: vi.fn(), reset: vi.fn(), connect: vi.fn() };
   render(<App client={client as unknown as VoiceClient} />);
   return { client, change: (next: Partial<View>) => act(() => { view = { ...view, ...next }; notify(); }) };
 }
@@ -66,4 +66,33 @@ test("stop response disables microphone and cancellation removes the draft", () 
   expect(client.suspend).toHaveBeenCalledOnce();
   change({ snapshot: { ...initial, draft: "", microphone_enabled: false } });
   expect(screen.queryByText("Partial answer")).toBeNull();
+});
+test("preparing speech and speaking retain the completed answer and expose stop", () => {
+  const { client, change } = fixture(); const initial = client.getSnapshot().snapshot!;
+  const messages = [{ role: "assistant" as const, content: "A completed answer" }];
+  change({ snapshot: { ...initial, state: "thinking", busy: true, preparing_speech: true, messages } });
+  expect(screen.getByText("Preparing speech")).toBeTruthy();
+  expect(screen.getByText("A completed answer")).toBeTruthy();
+  expect((screen.getByRole("button", { name: /Hold to talk/ }) as HTMLButtonElement).disabled).toBe(true);
+  change({ snapshot: { ...initial, state: "speaking", busy: true, messages } });
+  expect(screen.getByText("Speaking to you")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Stop speaking" }));
+  expect(client.suspend).toHaveBeenCalledOnce();
+  change({ snapshot: { ...initial, microphone_enabled: false, messages } });
+  expect(screen.getByText("A completed answer")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Stop speaking" })).toBeNull();
+});
+test("output selection is restricted to microphone-off idle sessions", () => {
+  const { client, change } = fixture(); const initial = client.getSnapshot().snapshot!;
+  const select = screen.getByLabelText("Speaker output") as HTMLSelectElement;
+  expect(select.disabled).toBe(true);
+  change({ snapshot: { ...initial, microphone_enabled: false,
+    outputs: [{ index: 4, name: "Synthetic speaker", sample_rate: 48000 }] } });
+  expect(select.disabled).toBe(false);
+  fireEvent.change(select, { target: { value: "4" } });
+  expect(client.selectOutput).toHaveBeenLastCalledWith(4);
+  fireEvent.change(select, { target: { value: "default" } });
+  expect(client.selectOutput).toHaveBeenLastCalledWith(null);
+  change({ snapshot: { ...initial, microphone_enabled: false, busy: true } });
+  expect(select.disabled).toBe(true);
 });

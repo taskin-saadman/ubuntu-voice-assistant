@@ -111,6 +111,9 @@ export class VoiceClient {
   async selectDevice(device: number | null) {
     try { await this.send("device", { device }); } catch (error) { this.report(error); }
   }
+  async selectOutput(device: number | null) {
+    try { await this.send("output", { device }); } catch (error) { this.report(error); }
+  }
   async reset() {
     this.update({ error: "", note: "" });
     try { await this.send("reset"); } catch (error) { this.report(error); }
