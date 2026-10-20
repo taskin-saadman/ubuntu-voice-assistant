@@ -301,5 +301,30 @@ worker; the next request loads it again. Speech is bounded to 90 seconds, with a
 25-second synthesis deadline. Playback startup is limited to 5 seconds, with bounded
 completion and cleanup waits. Native underflow is reported as an error rather than
 silently accepting dropped audio. Speaking follows PortAudio's scheduled first-buffer
-DAC time and finishes after its drain callback; exact acoustic timing still needs
-human verification. No sentence streaming, barge-in or automatic audio replay is added.
+DAC time and finishes after its drain callback, or after the final fully queued
+buffer's remaining scheduled time on a monotonic clock plus a 100 ms margin if
+that callback is missing and the stream clock stops advancing.
+Exact acoustic timing still needs human verification. No sentence streaming, barge-in or automatic audio replay is added.
+
+
+### Bluetooth headset checks
+
+For a first AirPods playback check, use the laptop microphone with the AirPods
+speaker output. Disable the microphone, select Reset assistant if needed, refresh
+devices and select the appropriate output again after reconnecting Bluetooth.
+After updating backend code, restart the Python backend and reconnect with its new
+key before retesting. Check three short answers for complete playback, no trailing
+error and a return to idle; then test Stop speaking and retry.
+
+Using the headset microphone is a separate test. WirePlumber can automatically
+switch Bluetooth devices to HSP/HFP when recording begins, with lower audio quality
+than A2DP playback. This can affect recognition, but it does not establish the cause
+of an individual mistranscription. See the
+[WirePlumber profile-switching documentation](https://pipewire.pages.freedesktop.org/wireplumber/daemon/configuration/settings.html).
+The application does not change Bluetooth profiles or system configuration.
+
+A playback-only test reproduced a completion timeout after Bluetooth output accepted
+speech, independent of microphone use. The worker now maps the final buffer's remaining scheduled time to a monotonic
+clock when the completion callback is missing and the stream clock freezes. Test headset-microphone recognition,
+profile transitions and audible final-word completion separately; passing the laptop
+microphone/AirPods output combination does not verify those behaviors.

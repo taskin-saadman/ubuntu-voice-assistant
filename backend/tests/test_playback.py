@@ -37,6 +37,7 @@ def test_callback_preserves_every_frame_and_zero_pads_final_block(channels: int)
 @pytest.mark.parametrize("failure", [None, "start", "underflow", "disconnect"])
 def test_native_callback_timing_completion_and_cleanup_without_hardware(
     failure: str | None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[str] = []
 
@@ -62,7 +63,7 @@ def test_native_callback_timing_completion_and_cleanup_without_hardware(
                     self.kwargs["callback"](
                         output,
                         960,
-                        SimpleNamespace(outputBufferDacTime=2.0),
+                        SimpleNamespace(outputBufferDacTime=2.0, currentTime=1.8),
                         failure == "underflow",
                     )
                 except (CallbackStop, CallbackAbort):
@@ -92,7 +93,8 @@ def test_native_callback_timing_completion_and_cleanup_without_hardware(
         check_output_settings=lambda **kw: None,
         query_devices=lambda *args: {"default_samplerate": 48000, "max_output_channels": 2},
     )
-    with patch.dict(sys.modules, {"sounddevice": sd}):
+    with monkeypatch.context() as modules:
+        modules.setitem(sys.modules, "sounddevice", sd)
         if failure:
             with pytest.raises((OSError, RuntimeError)):
                 play(AUDIO, None, lambda: calls.append("started"), lambda: failure == "disconnect")
@@ -208,3 +210,73 @@ async def test_cancelled_stop_waiter_does_not_abandon_native_cleanup() -> None:
         with pytest.raises(PlaybackError):
             await task
     factory.assert_reaped()
+
+
+@pytest.mark.parametrize("mode", ["missing_finished", "partial", "invalid_time"])
+def test_completion_fallback_requires_all_audio_and_valid_final_dac_time(
+    mode: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from voice_assistant.audio import output_worker
+
+    observed: dict[str, Any] = {"clock": 0.0, "queued": False}
+
+    class CallbackStop(Exception):
+        pass
+
+    class CallbackAbort(Exception):
+        pass
+
+    class Stream:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+        def start(self) -> None:
+            # 0.1 s of AUDIO, resampled to 48 kHz: five callback buffers.
+            for i in range(5 if mode != "partial" else 1):
+                timestamp = 0.0 if mode == "invalid_time" else 2.0 + i * 0.02
+                try:
+                    self.kwargs["callback"](
+                        bytearray(960 * 4),
+                        960,
+                        SimpleNamespace(outputBufferDacTime=timestamp, currentTime=timestamp - 0.2),
+                        False,
+                    )
+                except CallbackStop:
+                    observed["queued"] = True
+                    break
+            # Deliberately omit finished_callback, as observed with Bluetooth output.
+
+        @property
+        def time(self) -> float:
+            # Native reproduction: this clock freezes once the buffers are queued.
+            return 2.0
+
+        def abort(self) -> None:
+            observed["aborted_at"] = observed["clock"]
+
+        def close(self) -> None:
+            observed["closed"] = True
+
+    def clock() -> float:
+        observed["clock"] += 0.05
+        return float(observed["clock"])
+
+    sd = SimpleNamespace(
+        RawOutputStream=Stream,
+        CallbackStop=CallbackStop,
+        CallbackAbort=CallbackAbort,
+        check_output_settings=lambda **kw: None,
+        query_devices=lambda *args: {"default_samplerate": 48000, "max_output_channels": 2},
+    )
+    monkeypatch.setitem(sys.modules, "sounddevice", sd)
+    with patch.object(output_worker, "monotonic", clock):
+        if mode == "missing_finished":
+            play(AUDIO, None, lambda: None, lambda: False)
+            assert observed["queued"]
+            # Do not discard the final buffer until its DAC end plus the grace interval.
+            assert observed["aborted_at"] >= 0.05 + 0.2 + 0.02 + 0.1
+        else:
+            with pytest.raises(RuntimeError, match="did not finish"):
+                play(AUDIO, None, lambda: None, lambda: False)
+        assert observed["closed"]

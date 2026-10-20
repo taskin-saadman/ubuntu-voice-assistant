@@ -305,6 +305,13 @@ selected output's default rate and mono samples are duplicated for stereo. The
 PortAudio callback fills every buffer, pads the final block with silence, and
 requests a drain after the last samples. The worker reports start at the first
 buffer's scheduled DAC time, then reports completion after the finished callback.
+For Bluetooth backends that omit that callback, completion can instead follow the
+final fully queued buffer's remaining scheduled duration, mapped from its callback
+timestamps to a monotonic clock with a 100 ms margin. This also handles a frozen
+stream clock after CallbackStop. Partial output,
+invalid timing and underflow do not qualify for this fallback; the existing deadline
+still bounds stalled devices. This prevents successful output becoming a false
+completion-timeout error.
 Errors abort/close output; parent disconnection is checked during playback. The
 async adapter also bounds startup and completion, and kills/reaps blocked workers.
 This reflects the audio driver's timing, not a measurement of sound at the listener.

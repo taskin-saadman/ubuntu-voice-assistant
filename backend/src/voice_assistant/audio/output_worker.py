@@ -1,5 +1,6 @@
 """Private PortAudio playback process. No microphone, disk writes or shell commands."""
 
+import math
 import select
 import sys
 import threading
@@ -52,16 +53,35 @@ def play(
     finished = threading.Event()
     failed = threading.Event()
     dac_time = 0.0
+    final_buffer_deadline: float | None = None
+    all_queued = threading.Event()
 
     def callback(output: Any, frames: int, timing: Any, status: Any) -> None:
-        nonlocal dac_time
+        nonlocal dac_time, final_buffer_deadline
         try:
             if status:
                 raise ValueError("Output underflow")
             last = player.fill(output, frames)
+            timestamp = float(timing.outputBufferDacTime)
             if not first.is_set():
-                dac_time = float(timing.outputBufferDacTime)
+                dac_time = timestamp
                 first.set()
+            if last:
+                # Bluetooth/ALSA can freeze stream.time and omit the finished
+                # callback after CallbackStop. Map the remaining scheduled audio
+                # to a monotonic deadline while the callback clock is still live.
+                current = float(timing.currentTime)
+                if (
+                    math.isfinite(timestamp)
+                    and math.isfinite(current)
+                    and current >= 0
+                    and timestamp > 0
+                    and timestamp >= max(current, dac_time)
+                ):
+                    final_buffer_deadline = (
+                        monotonic() + (timestamp - current) + frames / rate + 0.1
+                    )
+                all_queued.set()
         except Exception:
             output[:] = b"\0" * (frames * channels * 2)
             failed.set()
@@ -95,12 +115,21 @@ def play(
         started()
         deadline = monotonic() + audio.duration + 3
         while not finished.wait(0.01):
-            if failed.is_set() or disconnected() or monotonic() > deadline:
+            if failed.is_set() or disconnected():
+                raise RuntimeError("Output did not finish")
+            if (
+                all_queued.is_set()
+                and final_buffer_deadline is not None
+                and monotonic() >= final_buffer_deadline
+            ):
+                break
+            if monotonic() > deadline:
                 raise RuntimeError("Output did not finish")
         if failed.is_set():
             raise RuntimeError("Output failed")
     finally:
-        # Normal completion has already drained; errors discard queued audio.
+        # Completion follows drain notification or the final buffer's mapped end time.
+        # Errors discard queued audio; neither path waits on a stuck native drain.
         try:
             stream.abort()
         finally:

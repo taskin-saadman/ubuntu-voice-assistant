@@ -636,3 +636,43 @@ Stop/Escape/focus-loss/disconnect behavior, microphone indicator observations,
 selected-device routing/removal and recovery, and a Wi-Fi-disabled restart. The
 first complete microphone-to-speaker milestone is awaiting that user acceptance.
 No native UI visual inspection, distribution approval, package or release is claimed.
+
+### Bluetooth completion-timeout fix
+
+On 2026-10-20, the user reported that an AirPods reply played but was followed by
+an audio-playback error. They also reported less accurate recognition with the
+headset microphone than with the laptop microphone. These are distinct findings;
+headset-microphone quality is not established as fixed by this playback change.
+
+A playback-only synthetic test reproduced the error without opening any microphone:
+a 2.55-second clip began output, then failed after 5.84 seconds waiting for completion.
+Read-only PipeWire inspection showed AAC/A2DP output and automatic headset-profile
+switching enabled; no system or Bluetooth settings were changed.
+
+Additional callback instrumentation of a 2.66-second synthetic clip showed that
+all frames were queued and CallbackStop was requested, with no underflow flags,
+but no finished callback arrived. The final buffer's scheduled DAC time was 2.70 s,
+while the stream clock stopped at about 2.49 s. A first attempt to wait for that
+stream clock to reach the final end time therefore still timed out. The final fix
+maps the last buffer's remaining scheduled duration to a monotonic clock and adds
+a 100 ms margin. It only permits fallback completion after all audio has been queued
+with valid timestamps; incomplete buffers, invalid timing, underflow and disconnect
+remain failures, and the existing deadline still bounds a stalled device.
+
+After the AirPods were reconnected, the updated adapter completed two native
+playbacks of a 2.57-second synthetic clip in 3.28 s and 3.29 s from adapter entry.
+Cancellation during output and a subsequent playback retry also passed. All workers
+were reaped. The tests used the selected Bluetooth output and never opened its
+microphone. No audio files, private transcripts or device identifiers were added
+to the repository. These observations verify adapter completion and cleanup, not
+independent acoustic measurements or full desktop acceptance with headset input.
+
+Validation: **227 backend tests passed**, including new missing-finished-callback,
+frozen-stream-clock, partial-output and invalid-timing cases. Existing playback
+error and cancellation tests still pass. The isolated playback test suite passes
+19 tests; its sounddevice mocks now restore only that module, avoiding unintended
+NumPy module unloading when run alone. Ruff lint/format, strict mypy and
+`git diff --check` passed. Frontend/Rust code was unchanged, so those suites were
+not repeated. Restart the Python backend and retest several full desktop turns;
+headset-microphone recognition/profile switching and audible last-word completion
+remain user acceptance checks.
