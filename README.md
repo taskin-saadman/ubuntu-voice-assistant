@@ -8,12 +8,15 @@ The recorded-audio Whisper → Qwen → Piper pipeline has also been tested sepa
 on the target laptop, including a restart with Wi-Fi disabled. Capture, VAD and
 Whisper now connect through a local transcription diagnostic and an authenticated
 React push-to-talk interface. Phase 4 connects streamed Qwen replies through llama.cpp;
-Piper playback remains Phase 5 work. Native speech-to-Qwen checks with generated
-audio pass; the user has accepted desktop replies, follow-up context, Stop/Escape
+Phase 5 adds CPU Piper synthesis, selected-device playback and cancellation.
+Native checks with generated audio pass; the user has accepted desktop replies, follow-up context, Stop/Escape
 cancellation and server-down recovery.
 The Tauri shell builds and renders on the laptop. The user has accepted native
-transcription, silence handling, Escape/focus-loss cancellation and retry; broader
-hardware and offline acceptance checks remain. See the
+transcription, silence handling, Escape/focus-loss cancellation and retry. Phase 5
+manual acceptance now includes spoken answers, playback cancellation/recovery,
+output-device checks and a Wi-Fi-disabled restart. AirPods playback and microphone
+use also pass, with occasional recognition errors remaining a known limitation.
+See the
 [verification results and limitations](docs/verification.md).
 
 ## Development with uv
@@ -79,8 +82,10 @@ Ctrl+C cancels and releases resources. This diagnostic displays the transcript i
 your terminal and writes no recordings or history files. See
 [Ubuntu audio setup](docs/setup-ubuntu.md) for device enumeration, local model
 requirements, silence/recovery checks and limitations. Start the Qwen server using
-the [Phase 4 setup](docs/desktop-development.md#start-qwen), then restart the desktop
-backend and UI to enable streamed answers. The health server remains
+the [local Qwen setup](docs/desktop-development.md#start-qwen), then restart the desktop
+backend and UI to enable streamed answers and spoken playback. The
+[Phase 5 checklist](docs/desktop-development.md#phase-5-speech-and-playback-acceptance)
+covers output selection, cancellation and failure recovery. The health server remains
 read-only. To try the authenticated hold-to-talk preview, follow the
 [desktop development guide](docs/desktop-development.md). It includes connection
 setup, native prerequisites and the remaining manual acceptance checks.

@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from voice_assistant.api import create_app
 from voice_assistant.audio.models import InputDevice
+from voice_assistant.audio.output_models import OutputDevice
 from voice_assistant.controller import Controller, TranscriptionComponents
 from voice_assistant.transport import DesktopTransport
 
@@ -30,6 +31,8 @@ class FakeRuntime:
         self.ready = False
         self.device: int | None = None
         self.devices: tuple[InputDevice, ...] = ()
+        self.outputs: tuple[OutputDevice, ...] = ()
+        self.output_device: int | None = None
 
     async def prepare(self) -> None:
         self.ready = True
@@ -37,6 +40,9 @@ class FakeRuntime:
 
     def select_device(self, device: int | None) -> None:
         self.device = device
+
+    def select_output(self, device: int | None) -> None:
+        self.output_device = device
 
     async def microphone(self, enabled: bool) -> None:
         await self.controller.set_microphone(enabled)
@@ -237,3 +243,43 @@ def test_authenticated_streaming_draft_and_disconnect_cleanup() -> None:
             assert len(snapshot["messages"]) == 1
         assert runtime.controller.draft == ""
         assert not runtime.controller.busy and not runtime.controller.microphone_enabled
+
+
+def test_output_selection_and_preparing_speech_snapshot() -> None:
+    runtime = FakeRuntime()
+    runtime.outputs = (OutputDevice(index=4, name="Synthetic output", sample_rate=48000),)
+    runtime.controller.preparing_speech = True
+    with TestClient(create_app(desktop=DesktopTransport(runtime, TOKEN))) as client:
+        with client.websocket_connect("ws://127.0.0.1/session", headers=ORIGIN) as socket:
+            socket.send_json({"version": 1, "token": TOKEN})
+            snapshot = receive(socket, "snapshot")
+            assert snapshot["preparing_speech"]
+            assert snapshot["outputs"][0]["index"] == 4
+            assert command(socket, "output", device=4)["error"] is None
+            assert runtime.output_device == 4
+            assert command(socket, "output", device=None)["error"] is None
+            assert runtime.output_device is None
+
+
+def test_disconnect_cancels_playback_and_preserves_completed_answer() -> None:
+    runtime = FakeRuntime()
+    runtime.controller = Controller(runtime.fake.components())
+    runtime.fake.gates["play"] = asyncio.Event()
+    with TestClient(create_app(desktop=DesktopTransport(runtime, TOKEN))) as client:
+        with client.websocket_connect("ws://127.0.0.1/session", headers=ORIGIN) as socket:
+            socket.send_json({"version": 1, "token": TOKEN})
+            receive(socket, "snapshot")
+            command(socket, "prepare")
+            command(socket, "microphone", enabled=True)
+            turn = command(socket, "start")["turn_id"]
+            command(socket, "release", turn_id=turn)
+            for _ in range(50):
+                if receive(socket, "snapshot")["state"] == "speaking":
+                    break
+            else:
+                raise AssertionError("Speaking was not reached")
+        # A new session is not admitted until prior playback is stopped.
+        assert client.portal is not None
+        client.portal.call(runtime.controller.wait)
+    assert not runtime.fake.playing and not runtime.controller.microphone_enabled
+    assert runtime.controller.components.history.messages()[-1].role == "assistant"

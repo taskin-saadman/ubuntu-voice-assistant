@@ -13,6 +13,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from pydantic import Field, ValidationError, model_validator
 
 from voice_assistant.audio.models import CaptureError, InputDevice
+from voice_assistant.audio.output_models import OutputDevice, PlaybackError
 from voice_assistant.contracts import Message, Schema
 from voice_assistant.controller import Controller, ControllerRejected
 from voice_assistant.events import Event
@@ -25,11 +26,15 @@ ORIGINS = frozenset({"http://127.0.0.1:1420", "tauri://localhost", "http://tauri
 class SessionRuntime(Protocol):
     controller: Controller
     devices: tuple[InputDevice, ...]
+    outputs: tuple[OutputDevice, ...]
 
     @property
     def ready(self) -> bool: ...
     @property
     def device(self) -> int | None: ...
+    @property
+    def output_device(self) -> int | None: ...
+    def select_output(self, device: int | None) -> None: ...
     async def prepare(self) -> None: ...
     def select_device(self, device: int | None) -> None: ...
     async def microphone(self, enabled: bool) -> None: ...
@@ -44,7 +49,7 @@ class Authentication(Schema):
 class Command(Schema):
     id: UUID
     action: Literal[
-        "ping", "prepare", "device", "microphone", "start", "release", "cancel", "reset"
+        "ping", "prepare", "device", "output", "microphone", "start", "release", "cancel", "reset"
     ]
     enabled: bool | None = Field(default=None, strict=True)
     device: int | None = Field(default=None, ge=0, strict=True)
@@ -56,7 +61,7 @@ class Command(Schema):
             raise ValueError("Microphone commands require enabled")
         if (self.action in {"release", "cancel"}) != (self.turn_id is not None):
             raise ValueError("Release/cancel require turn ownership")
-        if self.action != "device" and self.device is not None:
+        if self.action not in {"device", "output"} and self.device is not None:
             raise ValueError("Unexpected device")
         return self
 
@@ -73,6 +78,9 @@ class Snapshot(Schema):
     device: int | None
     devices: tuple[InputDevice, ...]
     messages: tuple[Message, ...] = Field(repr=False)
+    output_device: int | None = None
+    outputs: tuple[OutputDevice, ...] = ()
+    preparing_speech: bool = False
     draft: str = Field(default="", max_length=8192, repr=False)
 
 
@@ -105,6 +113,9 @@ class DesktopTransport:
             devices=self.runtime.devices,
             messages=c.components.history.messages(),
             draft=c.draft,
+            output_device=self.runtime.output_device,
+            outputs=self.runtime.outputs,
+            preparing_speech=c.preparing_speech,
         )
 
     async def serve(self, socket: WebSocket) -> None:
@@ -204,6 +215,8 @@ class DesktopTransport:
                 await self.runtime.prepare()
             elif command.action == "device":
                 self.runtime.select_device(command.device)
+            elif command.action == "output":
+                self.runtime.select_output(command.device)
             elif command.action == "microphone":
                 assert command.enabled is not None
                 await self.runtime.microphone(command.enabled)
@@ -218,7 +231,7 @@ class DesktopTransport:
                 await c.cancel(command.turn_id)
             elif command.action == "reset":
                 c.reset()
-        except (ControllerRejected, SpeechError, CaptureError):
+        except (ControllerRejected, SpeechError, CaptureError, PlaybackError):
             return Packet(
                 kind="ack",
                 id=command.id,

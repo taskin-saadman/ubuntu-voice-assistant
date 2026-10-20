@@ -569,3 +569,153 @@ for this phase. Piper playback remains Phase 5 work.
 
 This acceptance update changes documentation only. `git diff --check` passed;
 application test suites were not repeated.
+
+## Phase 5: Piper synthesis and selected-device playback
+
+Implemented on 2026-10-20 on `feat/phase-5-piper-playback`. The desktop now wires
+complete-answer CPU Piper synthesis and selected-device PortAudio playback after
+Qwen. The UI distinguishes Preparing speech from Speaking, offers Stop speaking,
+and preserves completed answers on synthesis/playback failure or cancellation.
+No dependencies, system configuration, downloaded assets or release workflow were
+changed. Phase 4's merge and passing CI were reported by the user before this work.
+
+Local checks passed: **224 backend tests and 29 frontend tests**, Ruff lint/format,
+strict mypy across 54 Python files, TypeScript/Vite production build, offline locked
+Cargo check and Rust formatting. The full Python suite ran with warnings treated
+as errors, asyncio debug and Hugging Face offline flags. Hosted Phase 5 CI has not
+run. Documentation-only edits were checked with `git diff --check`.
+
+New tests cover bounded synthesis/PCM schemas, CPU-only/thread-limited engine setup,
+missing voice/config, unsupported phonemizers, literal handling of Piper phoneme
+markup, resident worker reuse, timeouts, malformed/truncated worker output, delayed
+spawn cancellation, forced termination, cancellation-safe cleanup and retry. Playback
+tests cover complete-frame rendering, final silence padding, error-buffer silence,
+DAC-time start notification, drain completion, device failures and cancellation.
+Controller/runtime/transport/UI coverage verifies output selection guards, preserved
+answers, preparation/speaking feedback, Stop, disconnect cleanup and retry.
+
+### Native checks
+
+Only synthetic input/text was used; the microphone was not opened. Generated PCM
+and conversations stayed in memory. Existing downloaded models and the default
+system output were used; no output recordings or screenshots were saved.
+
+| Check | Observed result |
+| --- | --- |
+| Piper cold synthesis of a two-sentence test | 4.73 s mono audio at 22050 Hz; 1.68 s synthesis including worker/model startup |
+| Same request with resident Piper | 4.79 s audio; 0.19 s synthesis |
+| Output-device enumeration | 15 compatible outputs returned without opening playback |
+| Short native default-device playback | 2.11 s audio; start notification after 1.19 s, completion after 3.06 s from adapter call |
+| Cancel during native playback | Worker terminated/reaped; measured cancellation rounded to 0.00 s in this sample |
+| Playback after cancellation | Completed successfully |
+| Generated 5.24 s input → Silero/Whisper → Qwen → Piper → native output | Completed in 9.16 s, including output playback |
+| Full-controller states | listening → transcribing → thinking → speaking → idle |
+| Full-controller history and cleanup | User and completed assistant messages retained; output worker reaped |
+
+The full-controller measurement excludes synthetic input generation and engine
+warmup; it substitutes generated audio for physical capture and bypasses the UI.
+A temporary Qwen server used the existing pinned model/runtime, GPU-fit settings,
+4096 context and documented non-thinking/offline flags, then was stopped. All test
+workers were closed. These are individual samples, not latency percentiles, acoustic
+measurements or a recognition/answer-quality benchmark. PortAudio completion does
+not independently establish that the user heard clear speech. Wi-Fi was not disabled
+and no network-traffic audit was performed.
+
+The first native synthesis attempt exposed the local LJSpeech config's `en` eSpeak
+identifier. The initial implementation only allowed `en-us`; the adapter now accepts
+both English identifiers, with a regression test for each. The existing model and
+configuration were unchanged. Two new WebSocket tests initially used the test
+client's default host and were rejected by the existing host restriction; their
+URLs were corrected to loopback. Neither issue remains in the passing checks.
+
+### Remaining acceptance
+
+Follow the [Phase 5 checklist](desktop-development.md#phase-5-speech-and-playback-acceptance)
+for audible end-to-end desktop turns, last-word completion, repeated turns,
+Stop/Escape/focus-loss/disconnect behavior, microphone indicator observations,
+selected-device routing/removal and recovery, and a Wi-Fi-disabled restart. The
+first complete microphone-to-speaker milestone is awaiting that user acceptance.
+No native UI visual inspection, distribution approval, package or release is claimed.
+
+### Bluetooth completion-timeout fix
+
+On 2026-10-20, the user reported that an AirPods reply played but was followed by
+an audio-playback error. They also reported less accurate recognition with the
+headset microphone than with the laptop microphone. These are distinct findings;
+headset-microphone quality is not established as fixed by this playback change.
+
+A playback-only synthetic test reproduced the error without opening any microphone:
+a 2.55-second clip began output, then failed after 5.84 seconds waiting for completion.
+Read-only PipeWire inspection showed AAC/A2DP output and automatic headset-profile
+switching enabled; no system or Bluetooth settings were changed.
+
+Additional callback instrumentation of a 2.66-second synthetic clip showed that
+all frames were queued and CallbackStop was requested, with no underflow flags,
+but no finished callback arrived. The final buffer's scheduled DAC time was 2.70 s,
+while the stream clock stopped at about 2.49 s. A first attempt to wait for that
+stream clock to reach the final end time therefore still timed out. The final fix
+maps the last buffer's remaining scheduled duration to a monotonic clock and adds
+a 100 ms margin. It only permits fallback completion after all audio has been queued
+with valid timestamps; incomplete buffers, invalid timing, underflow and disconnect
+remain failures, and the existing deadline still bounds a stalled device.
+
+After the AirPods were reconnected, the updated adapter completed two native
+playbacks of a 2.57-second synthetic clip in 3.28 s and 3.29 s from adapter entry.
+Cancellation during output and a subsequent playback retry also passed. All workers
+were reaped. The tests used the selected Bluetooth output and never opened its
+microphone. No audio files, private transcripts or device identifiers were added
+to the repository. These observations verify adapter completion and cleanup, not
+independent acoustic measurements or full desktop acceptance with headset input.
+
+Validation: **227 backend tests passed**, including new missing-finished-callback,
+frozen-stream-clock, partial-output and invalid-timing cases. Existing playback
+error and cancellation tests still pass. The isolated playback test suite passes
+19 tests; its sounddevice mocks now restore only that module, avoiding unintended
+NumPy module unloading when run alone. Ruff lint/format, strict mypy and
+`git diff --check` passed. Frontend/Rust code was unchanged, so those suites were
+not repeated. Restart the Python backend and retest several full desktop turns;
+headset-microphone recognition/profile switching and audible last-word completion
+remain user acceptance checks.
+
+### User acceptance of AirPods playback and microphone use
+
+On 2026-10-20, following the Bluetooth fix and the request to retest repeated short
+desktop turns, the user confirmed that all checks passed. This records acceptance
+of the requested playback-completion/return-to-idle checks without the trailing
+error. The user also explicitly confirmed testing the AirPods microphone, while
+noting that some words were still missed.
+
+The user suggested nearby conversation/background noise as a possible explanation.
+That cause has not been isolated with controlled comparisons. Recognition accuracy
+remains a limitation; the playback fix does not claim to improve transcription.
+No personal recordings, transcripts or screenshots were saved in the repository.
+
+This supersedes the pending AirPods desktop retest above. It is user-reported
+acceptance, distinct from the earlier instrumented playback-only tests. The latest
+confirmation follows the Bluetooth retest request and does not separately establish
+Wi-Fi-disabled desktop restart, device-removal recovery or every cancellation path
+in the broader Phase 5 checklist.
+
+Documentation only: `git diff --check` passed; application tests were not repeated.
+
+### Completion of Phase 5 manual acceptance
+
+On 2026-10-20, after being asked to complete the remaining playback cancellation,
+output-device recovery and Wi-Fi-disabled restart checks, the user confirmed that
+all tests passed and requested a branch push and PR description.
+
+This records user acceptance of Stop speaking, Escape, focus loss and Disconnect
+during playback with successful retry; the applicable output-device removal/recovery
+checks; and a complete spoken turn after restarting Qwen, the backend and desktop
+with Wi-Fi disabled. It supersedes the corresponding pending statuses above.
+These are user-reported results, not independently captured acoustic measurements
+or a network-traffic audit. Occasional AirPods microphone recognition errors remain
+a documented limitation with no confirmed cause.
+
+The first push-to-talk microphone-to-speaker flow is now accepted on the target
+laptop. Phase 6 hardening, broader hardware coverage and latency measurement remain
+future work. Hosted CI for this branch must still be checked on the PR; release
+packaging and publication are not included.
+
+This update changes documentation only. `git diff --check` passed; the previously
+passing application checks were not repeated.

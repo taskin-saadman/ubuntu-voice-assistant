@@ -137,3 +137,27 @@ logging-disable flags. The client stores no audio or conversation files.
 Protocol decisions were checked against the installed pinned llama.cpp source and
 [server documentation at that revision](https://github.com/ggml-org/llama.cpp/blob/620d2225cc436ab0b001e3200e590e3b286ef9ab/tools/server/README.md).
 HTTPX behavior and licensing are described in the [upstream repository](https://github.com/encode/httpx/tree/0.28.1).
+
+
+## Phase 5 Piper and playback
+
+No dependency or lockfile change is needed. The adapters reuse locked Piper 1.8.0,
+ONNX Runtime, sounddevice/PortAudio, NumPy and PyAV. Piper provides local synthesis;
+sounddevice provides selected-device output; PyAV supplies resampling. The installed
+Piper metadata declares `GPL-3.0-or-later`. Its engine and bundled components require
+appropriate distribution review before packaging; this phase does not publish builds.
+
+The selected `en_US-ljspeech-medium` model and local MODEL_CARD were inspected.
+The [upstream voice card](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD)
+identifies the LJ Speech dataset as public domain. This dataset statement alone is
+not a complete distribution-license audit of the trained artifact and application.
+Keep the voice-specific review open before distribution, as required by AGENTS.md.
+
+Implementation was checked against the installed pinned Piper source and
+[Piper's Python API](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/API_PYTHON.md),
+and against the [sounddevice stream contract](https://python-sounddevice.readthedocs.io/en/latest/api/streams.html).
+Piper loads explicit local assets and disables the optional Arabic resource loader;
+unsupported phonemizer configurations fail instead of fetching assets. ONNX Runtime
+telemetry is disabled before session creation. Playback uses local PortAudio devices.
+Neither adapter adds a network request, cloud fallback or file-output path. Existing
+package/model download sources remain setup-time operations, separate from runtime.

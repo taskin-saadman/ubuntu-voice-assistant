@@ -42,7 +42,8 @@ export function App({ client }: { client: VoiceClient }) {
   const label = !connected ? "Connect to begin" : view.preparing ? "Loading speech model"
     : !snapshot?.ready ? "Speech model not loaded" : !enabled ? "Microphone disabled"
     : state === "idle" ? "Ready when you are" : state === "listening" ? "Listening to you"
-    : state === "transcribing" ? "Turning speech into text" : state === "thinking" ? "Thinking about your question"
+    : state === "transcribing" ? "Turning speech into text" : state === "thinking" ? (snapshot?.preparing_speech ? "Preparing speech" : "Thinking about your question")
+    : state === "speaking" ? "Speaking to you"
     : state === "error" ? "Let’s try again" : state;
 
   return <main className="app">
@@ -70,8 +71,8 @@ export function App({ client }: { client: VoiceClient }) {
           <span aria-hidden="true">◉</span> {held ? "Release to transcribe" : "Hold to talk"}
         </button>
         <span className="keyboard-hint">Hold Space or Enter when focused · Esc turns the microphone off</span>
-        {connected && snapshot?.busy && (state === "thinking" || state === "transcribing") &&
-          <button className="quiet" onClick={cancel}>Stop response</button>}
+        {connected && snapshot?.busy && (state === "thinking" || state === "transcribing" || state === "speaking") &&
+          <button className="quiet" onClick={cancel}>{state === "speaking" ? "Stop speaking" : "Stop response"}</button>}
         <button className={`mic-toggle ${enabled ? "enabled" : ""}`} role="switch" aria-checked={enabled}
           disabled={!connected || (!enabled && (!snapshot?.ready || view.preparing || snapshot.busy))}
           onClick={() => { if (enabled) cancel(); else void client.microphone(true); }}>
@@ -99,7 +100,13 @@ export function App({ client }: { client: VoiceClient }) {
               <option value="default">System default input</option>
               {snapshot?.devices.map(device => <option value={device.index} key={device.index}>{device.name}</option>)}
             </select>
-            <p className="small">Disable the microphone to change inputs. Switching away from this window also disables it.</p>
+            <label htmlFor="output-device">Speaker output</label>
+            <select id="output-device" value={snapshot?.output_device ?? "default"} disabled={!snapshot?.ready || enabled || snapshot.busy}
+              onChange={event => void client.selectOutput(event.target.value === "default" ? null : Number(event.target.value))}>
+              <option value="default">System default output</option>
+              {snapshot?.outputs.map(device => <option value={device.index} key={device.index}>{device.name}</option>)}
+            </select>
+            <p className="small">Disable the microphone to change devices. Switching away from this window also disables it.</p>
           </>}
         </section>
         <section className="conversation glass" aria-label="Conversation">
@@ -116,7 +123,7 @@ export function App({ client }: { client: VoiceClient }) {
               <span className="speaker">ASSISTANT · WRITING</span><p>{snapshot.draft}</p>
             </article>}
           </div>
-          <p className="small milestone">Local Qwen conversation · Speech playback comes next.</p>
+          <p className="small milestone">Local Qwen replies · Piper speech on this laptop.</p>
         </section>
       </aside>
     </section>

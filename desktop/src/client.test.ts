@@ -4,7 +4,7 @@ import { parsePacket, type Snapshot } from "./protocol";
 
 export const snapshot: Snapshot = {
   kind: "snapshot", version: 1, sequence: 0, state: "idle", busy: false,
-  microphone_enabled: true, turn_id: null, ready: true, device: null, draft: "", devices: [], messages: [],
+  microphone_enabled: true, turn_id: null, ready: true, device: null, output_device: null, outputs: [], preparing_speech: false, draft: "", devices: [], messages: [],
 };
 class FakeSocket {
   static OPEN = 1;
@@ -90,4 +90,17 @@ test("draft snapshots can update at the same event sequence and clear on cancell
 test("oversized drafts fail closed", () => {
   const socket = connect(); socket.packet({ ...snapshot, draft: "x".repeat(8193) });
   expect(client.getSnapshot().snapshot).toBeNull();
+});
+test("output selection sends a typed command and accepts acknowledgement", async () => {
+  const socket = connect();
+  const selecting = client.selectOutput(4);
+  expect(socket.sent[1]).toMatchObject({ action: "output", device: 4 });
+  socket.ack(1); await selecting;
+  expect(client.getSnapshot().error).toBe("");
+});
+test.each([
+  { preparing_speech: "yes" }, { outputs: [{ index: -1, name: "bad", sample_rate: 48000 }] },
+  { output_device: -1 },
+])("rejects malformed playback snapshot fields", fields => {
+  expect(() => parsePacket(JSON.stringify({ ...snapshot, ...fields }))).toThrow();
 });
