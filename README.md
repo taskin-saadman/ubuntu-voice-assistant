@@ -13,8 +13,10 @@ Native checks with generated audio pass; the user has accepted desktop replies, 
 cancellation and server-down recovery.
 The Tauri shell builds and renders on the laptop. The user has accepted native
 transcription, silence handling, Escape/focus-loss cancellation and retry; broader
-hardware and offline acceptance checks remain. Phase 5 desktop listening and
-playback-cancellation acceptance is pending. See the
+hardware and offline acceptance checks remain. The user has accepted Phase 5
+spoken answers and the AirPods playback fix, including use of the headset microphone
+with occasional recognition errors. Broader playback-cancellation acceptance remains
+separate. See the
 [verification results and limitations](docs/verification.md).
 
 ## Development with uv

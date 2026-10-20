@@ -676,3 +676,24 @@ NumPy module unloading when run alone. Ruff lint/format, strict mypy and
 not repeated. Restart the Python backend and retest several full desktop turns;
 headset-microphone recognition/profile switching and audible last-word completion
 remain user acceptance checks.
+
+### User acceptance of AirPods playback and microphone use
+
+On 2026-10-20, following the Bluetooth fix and the request to retest repeated short
+desktop turns, the user confirmed that all checks passed. This records acceptance
+of the requested playback-completion/return-to-idle checks without the trailing
+error. The user also explicitly confirmed testing the AirPods microphone, while
+noting that some words were still missed.
+
+The user suggested nearby conversation/background noise as a possible explanation.
+That cause has not been isolated with controlled comparisons. Recognition accuracy
+remains a limitation; the playback fix does not claim to improve transcription.
+No personal recordings, transcripts or screenshots were saved in the repository.
+
+This supersedes the pending AirPods desktop retest above. It is user-reported
+acceptance, distinct from the earlier instrumented playback-only tests. The latest
+confirmation follows the Bluetooth retest request and does not separately establish
+Wi-Fi-disabled desktop restart, device-removal recovery or every cancellation path
+in the broader Phase 5 checklist.
+
+Documentation only: `git diff --check` passed; application tests were not repeated.
