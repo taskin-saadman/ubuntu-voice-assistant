@@ -12,11 +12,11 @@ Phase 5 adds CPU Piper synthesis, selected-device playback and cancellation.
 Native checks with generated audio pass; the user has accepted desktop replies, follow-up context, Stop/Escape
 cancellation and server-down recovery.
 The Tauri shell builds and renders on the laptop. The user has accepted native
-transcription, silence handling, Escape/focus-loss cancellation and retry; broader
-hardware and offline acceptance checks remain. The user has accepted Phase 5
-spoken answers and the AirPods playback fix, including use of the headset microphone
-with occasional recognition errors. Broader playback-cancellation acceptance remains
-separate. See the
+transcription, silence handling, Escape/focus-loss cancellation and retry. Phase 5
+manual acceptance now includes spoken answers, playback cancellation/recovery,
+output-device checks and a Wi-Fi-disabled restart. AirPods playback and microphone
+use also pass, with occasional recognition errors remaining a known limitation.
+See the
 [verification results and limitations](docs/verification.md).
 
 ## Development with uv

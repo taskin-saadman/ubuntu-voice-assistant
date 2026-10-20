@@ -697,3 +697,25 @@ Wi-Fi-disabled desktop restart, device-removal recovery or every cancellation pa
 in the broader Phase 5 checklist.
 
 Documentation only: `git diff --check` passed; application tests were not repeated.
+
+### Completion of Phase 5 manual acceptance
+
+On 2026-10-20, after being asked to complete the remaining playback cancellation,
+output-device recovery and Wi-Fi-disabled restart checks, the user confirmed that
+all tests passed and requested a branch push and PR description.
+
+This records user acceptance of Stop speaking, Escape, focus loss and Disconnect
+during playback with successful retry; the applicable output-device removal/recovery
+checks; and a complete spoken turn after restarting Qwen, the backend and desktop
+with Wi-Fi disabled. It supersedes the corresponding pending statuses above.
+These are user-reported results, not independently captured acoustic measurements
+or a network-traffic audit. Occasional AirPods microphone recognition errors remain
+a documented limitation with no confirmed cause.
+
+The first push-to-talk microphone-to-speaker flow is now accepted on the target
+laptop. Phase 6 hardening, broader hardware coverage and latency measurement remain
+future work. Hosted CI for this branch must still be checked on the PR; release
+packaging and publication are not included.
+
+This update changes documentation only. `git diff --check` passed; the previously
+passing application checks were not repeated.
